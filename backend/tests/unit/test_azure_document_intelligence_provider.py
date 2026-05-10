@@ -169,3 +169,65 @@ def test_analyze_document_reuses_single_session(monkeypatch):
     assert isinstance(captured['session'], FakeSession)
     assert captured['session'].headers['Ocp-Apim-Subscription-Key'] == 'test-key'
     assert captured['operation_location'] == 'https://example.com/operations/1'
+
+
+def test_poll_result_respects_retry_after_header(monkeypatch):
+    provider = AzureDocumentIntelligenceOCRProvider(
+        endpoint='https://example.cognitiveservices.azure.com',
+        api_key='test-key',
+        max_poll_seconds=60,
+        poll_interval_seconds=1.0,
+    )
+
+    sleep_calls = []
+    time_values = iter([0.0, 1.0, 2.0])
+
+    class FakeResponse:
+        def __init__(self, status, headers=None):
+            self.status_code = 200
+            self._status = status
+            self.headers = headers or {}
+
+        def raise_for_status(self):
+            return None
+
+        def json(self):
+            return {'status': self._status}
+
+    class FakeSession:
+        def __init__(self):
+            self.responses = iter([
+                FakeResponse('running', {'Retry-After': '3'}),
+                FakeResponse('succeeded'),
+            ])
+
+        def get(self, *_args, **_kwargs):
+            return next(self.responses)
+
+    monkeypatch.setattr(
+        'services.ai_providers.ocr.azure_document_intelligence_provider.time.sleep',
+        lambda seconds: sleep_calls.append(seconds),
+    )
+    monkeypatch.setattr(
+        'services.ai_providers.ocr.azure_document_intelligence_provider.time.time',
+        lambda: next(time_values),
+    )
+
+    payload = provider._poll_result(FakeSession(), 'https://example.com/operations/1')
+
+    assert payload['status'] == 'succeeded'
+    assert sleep_calls == [3.0]
+
+
+def test_resolve_style_returns_empty_when_ranges_do_not_overlap():
+    provider = AzureDocumentIntelligenceOCRProvider(
+        endpoint='https://example.cognitiveservices.azure.com',
+        api_key='test-key',
+    )
+
+    style = provider._resolve_style(
+        {'offset': 10, 'length': 3},
+        [(0, 5, {'similarFontFamily': 'Aptos'})],
+    )
+
+    assert style == {}

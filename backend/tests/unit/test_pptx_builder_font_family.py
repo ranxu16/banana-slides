@@ -56,3 +56,23 @@ def test_multi_color_text_sets_east_asian_font_family_on_each_run():
         assert run.font.name == 'Microsoft YaHei'
         assert run_properties.find(qn('a:latin')).get('typeface') == 'Microsoft YaHei'
         assert run_properties.find(qn('a:ea')).get('typeface') == 'Microsoft YaHei'
+
+
+def test_font_family_nodes_are_inserted_before_hyperlink_properties():
+    builder, slide = _build_slide()
+
+    builder.add_text_element(
+        slide=slide,
+        text='中文字体',
+        bbox=[0, 0, 320, 80],
+        text_style=TextStyleResult(font_family='Microsoft YaHei'),
+    )
+
+    run = slide.shapes[-1].text_frame.paragraphs[0].runs[0]
+    run_properties = run._r.get_or_add_rPr()
+    run_properties.get_or_add_hlinkClick()
+    PPTXBuilder._apply_font_family_to_run(run, 'Microsoft YaHei')
+
+    child_tags = [child.tag for child in run_properties]
+    assert child_tags.index(qn('a:latin')) < child_tags.index(qn('a:hlinkClick'))
+    assert child_tags.index(qn('a:ea')) < child_tags.index(qn('a:hlinkClick'))

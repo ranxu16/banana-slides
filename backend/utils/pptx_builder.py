@@ -101,12 +101,20 @@ class PPTXBuilder:
 
         run.font.name = font_family
         run_properties = run._r.get_or_add_rPr()
-        for tag_name in ("a:latin", "a:ea"):
-            font_node = run_properties.find(qn(tag_name))
-            if font_node is None:
-                font_node = OxmlElement(tag_name)
-                run_properties.append(font_node)
-            font_node.set("typeface", font_family)
+        latin_node = run_properties.get_or_add_latin()
+        latin_node.set("typeface", font_family)
+
+        east_asian_node = run_properties.find(qn("a:ea"))
+        if east_asian_node is None:
+            east_asian_node = OxmlElement("a:ea")
+            run_properties.insert_element_before(
+                east_asian_node,
+                "a:hlinkClick",
+                "a:hlinkMouseOver",
+                "a:rtl",
+                "a:extLst",
+            )
+        east_asian_node.set("typeface", font_family)
     
     @classmethod
     def _get_font(cls, size_pt: float) -> Optional[ImageFont.FreeTypeFont]:

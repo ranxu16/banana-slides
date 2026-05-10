@@ -97,6 +97,9 @@ class AzureDocumentIntelligenceOCRProvider:
 
         while time.time() < deadline:
             response = session.get(operation_location, timeout=60)
+            if getattr(response, "status_code", None) == 429:
+                time.sleep(self._get_retry_delay_seconds(response.headers))
+                continue
             response.raise_for_status()
             payload = response.json()
             status = (payload.get("status") or "").lower()
@@ -109,9 +112,20 @@ class AzureDocumentIntelligenceOCRProvider:
             if status not in self.IN_PROGRESS_STATUSES:
                 raise RuntimeError(f"Azure OCR analyze returned unexpected status: {status or 'unknown'}")
 
-            time.sleep(self.poll_interval_seconds)
+            time.sleep(self._get_retry_delay_seconds(response.headers))
 
         raise TimeoutError("Azure OCR analyze timed out")
+
+    def _get_retry_delay_seconds(self, headers: Dict[str, Any]) -> float:
+        retry_after = headers.get("Retry-After") or headers.get("retry-after")
+        if retry_after is not None:
+            try:
+                retry_after_seconds = float(retry_after)
+                if retry_after_seconds > 0:
+                    return retry_after_seconds
+            except (TypeError, ValueError):
+                pass
+        return self.poll_interval_seconds
 
     @staticmethod
     def _extract_error_message(payload: Dict[str, Any]) -> str:
@@ -209,7 +223,7 @@ class AzureDocumentIntelligenceOCRProvider:
         start = span.get("offset", 0)
         end = start + span.get("length", 0)
         best_style: Dict[str, Any] = {}
-        best_overlap = -1
+        best_overlap = 0
         for range_start, range_end, style in style_ranges:
             overlap = max(0, min(end, range_end) - max(start, range_start))
             if overlap > best_overlap:
