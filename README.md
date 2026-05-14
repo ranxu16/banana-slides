@@ -7,6 +7,7 @@
   <a href="https://trendshift.io/repositories/22056" target="_blank">
     <img src="https://trendshift.io/api/badge/repositories/22056" alt="Anionex%2Fbanana-slides | Trendshift" width="265" height="58">
   </a>
+  <br>
   <a href="https://hellogithub.com/repository/Anionex/banana-slides" target="_blank">
     <img src="https://abroad.hellogithub.com/v1/widgets/recommend.svg?rid=c8a0ee51918e4353af08012b8472b85e&claim_uid=CtDTm2jbUHhVGBr&theme=neutral" alt="Featured｜HelloGitHub" width="265" height="58">
   </a>
