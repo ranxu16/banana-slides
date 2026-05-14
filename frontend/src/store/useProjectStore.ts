@@ -611,7 +611,9 @@ const debouncedUpdatePage = debounce(
               id: `streaming-${page.index}`,
               order_index: page.index,
               outline_content: { title: page.title, points: page.points },
-              description_content: page.description_text ? { text: page.description_text } : undefined,
+              description_content: page.description_text
+                ? { text: page.description_text, ...(page.extra_fields ? { extra_fields: page.extra_fields } : {}) }
+                : undefined,
               part: page.part,
               status: page.description_text ? 'DESCRIPTION_GENERATED' : 'DRAFT',
             };

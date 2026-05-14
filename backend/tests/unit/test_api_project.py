@@ -83,6 +83,29 @@ class TestProjectGet:
 class TestProjectOutlineStream:
     """流式大纲生成测试"""
 
+    def test_description_stream_prompt_uses_latest_description_format(self):
+        """从描述生成的 SSE prompt 应对齐最新页面描述格式，而不是旧版页面标题/页面文字格式"""
+        from services.ai_service import ProjectContext
+        from services.prompts import get_description_to_outline_prompt_markdown
+
+        context = ProjectContext({
+            'creation_type': 'descriptions',
+            'description_text': '第一页：介绍主题',
+        })
+
+        prompt = get_description_to_outline_prompt_markdown(
+            context,
+            language='zh',
+            extra_fields=['视觉元素'],
+        )
+
+        assert '<!-- PAGE_DESCRIPTION -->' in prompt
+        assert '--- 页面文字 ---' in prompt
+        assert '--- 页面文字结束 ---' in prompt
+        assert '图片素材：' in prompt
+        assert '视觉元素：' in prompt
+        assert '页面标题：' not in prompt
+
     def test_outline_stream_parses_legacy_outline_only_markdown(self):
         """普通大纲 SSE 仍兼容只含标题和要点的 Markdown 输出"""
         from services.ai_service import AIService, ProjectContext
@@ -116,9 +139,12 @@ class TestProjectOutlineStream:
                     '<!-- OUTLINE_POINTS -->\n'
                     '- Establish the page purpose and connect the audience from context to the main argument.\n'
                     '<!-- PAGE_DESCRIPTION -->\n'
-                    '页面标题：第一页\n\n'
-                    '页面文字：\n'
+                    '--- 页面文字 ---\n'
                     '- 背景和目标\n'
+                    '\n--- 页面文字结束 ---\n'
+                    '\n图片素材：\n'
+                    '使用一张简洁的背景图\n'
+                    '\n视觉元素：关键指标卡片\n'
                     '<!-- PAGE_END -->\n'
                     '<!-- END -->'
                 )
@@ -133,8 +159,9 @@ class TestProjectOutlineStream:
 
         assert pages[0]['title'] == '第一页'
         assert pages[0]['points'] == ['Establish the page purpose and connect the audience from context to the main argument.']
-        assert '页面标题：第一页' in pages[0]['description_text']
-        assert '页面文字：' in pages[0]['description_text']
+        assert '--- 页面文字 ---' in pages[0]['description_text']
+        assert '页面标题：' not in pages[0]['description_text']
+        assert pages[0]['extra_fields']['视觉元素'] == '关键指标卡片'
         assert pages[-1] == {'__stream_complete__': True}
 
     def test_description_stream_persists_outline_and_description(self, client, app, monkeypatch):
@@ -151,12 +178,13 @@ class TestProjectOutlineStream:
                 yield {
                     'title': '介绍主题',
                     'points': ['背景', '目标'],
-                    'description_text': '页面标题：介绍主题\n\n页面文字：\n- 背景\n- 目标',
+                    'description_text': '--- 页面文字 ---\n- 背景\n- 目标\n\n--- 页面文字结束 ---',
+                    'extra_fields': {'视觉元素': '背景图'},
                 }
                 yield {
                     'title': '展开方案',
                     'points': ['路径', '结果'],
-                    'description_text': '页面标题：展开方案\n\n页面文字：\n- 路径\n- 结果',
+                    'description_text': '--- 页面文字 ---\n- 路径\n- 结果\n\n--- 页面文字结束 ---',
                 }
                 yield {'__stream_complete__': True}
 
@@ -182,7 +210,8 @@ class TestProjectOutlineStream:
             assert project.status == 'DESCRIPTIONS_GENERATED'
             assert len(pages) == 2
             assert pages[0].get_outline_content() == {'title': '介绍主题', 'points': ['背景', '目标']}
-            assert pages[0].get_description_content()['text'].startswith('页面标题：介绍主题')
+            assert pages[0].get_description_content()['text'].startswith('--- 页面文字 ---')
+            assert pages[0].get_description_content()['extra_fields'] == {'视觉元素': '背景图'}
             assert pages[1].get_outline_content()['title'] == '展开方案'
 
 

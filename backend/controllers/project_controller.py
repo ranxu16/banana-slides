@@ -147,10 +147,13 @@ def _smart_merge_pages(project_id, pages_data):
         })
         description_text = page_data.get('description_text')
         if description_text:
-            page.set_description_content({
+            desc_content = {
                 'text': description_text,
                 'generated_at': datetime.now(timezone.utc).replace(tzinfo=None).isoformat(),
-            })
+            }
+            if page_data.get('extra_fields'):
+                desc_content['extra_fields'] = page_data['extra_fields']
+            page.set_description_content(desc_content)
             page.status = 'DESCRIPTION_GENERATED'
         elif not page.description_content:
             page.status = 'DRAFT'
@@ -578,6 +581,7 @@ def generate_outline_stream(project_id):
                         'points': page_data.get('points', []),
                         'part': page_data.get('part'),
                         'description_text': page_data.get('description_text'),
+                        'extra_fields': page_data.get('extra_fields'),
                     })
 
                 # Handle lock_page_count: pad with blank pages if needed

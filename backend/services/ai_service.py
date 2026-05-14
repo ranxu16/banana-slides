@@ -396,10 +396,17 @@ class AIService:
         """
         creation_type = project_context.creation_type or 'idea'
 
+        extra_field_names = self._get_extra_field_names() if creation_type == 'descriptions' else []
+        field_pattern = self._build_extra_field_pattern(extra_field_names)
+
         if creation_type == 'outline':
             prompt = get_outline_parsing_prompt_markdown(project_context, language)
         elif creation_type == 'descriptions':
-            prompt = get_description_to_outline_prompt_markdown(project_context, language)
+            prompt = get_description_to_outline_prompt_markdown(
+                project_context,
+                language,
+                extra_fields=extra_field_names,
+            )
         else:
             prompt = get_outline_generation_prompt_markdown(project_context, language)
 
@@ -408,6 +415,7 @@ class AIService:
         current_part = None
         current_page = None
         current_mode = 'points'
+        current_field = None
         stream_complete = False
 
         def _new_page(title: str) -> Dict:
@@ -415,6 +423,7 @@ class AIService:
                 'title': title,
                 'points': [],
                 'description_lines': [],
+                'extra_fields': {},
             }
             if current_part:
                 page['part'] = current_part
@@ -432,10 +441,12 @@ class AIService:
             description_text = "\n".join(page.get('description_lines', [])).strip()
             if description_text:
                 result['description_text'] = description_text
+            if page.get('extra_fields'):
+                result['extra_fields'] = dict(page['extra_fields'])
             return result
 
         def _process_line(line: str, stripped: str):
-            nonlocal current_part, current_page, current_mode, stream_complete
+            nonlocal current_part, current_page, current_mode, current_field, stream_complete
 
             if stripped == '<!-- END -->':
                 stream_complete = True
@@ -445,11 +456,17 @@ class AIService:
                 finished = _finalize_page(current_page)
                 current_page = None
                 current_mode = 'points'
+                current_field = None
                 return finished
 
             if not stripped:
                 if current_page is not None and current_mode == 'description':
-                    current_page['description_lines'].append('')
+                    if current_field:
+                        current_page['extra_fields'][current_field] = (
+                            current_page['extra_fields'].get(current_field, '') + "\n"
+                        )
+                    else:
+                        current_page['description_lines'].append('')
                 return None
 
             if stripped.startswith('# ') and not stripped.startswith('## '):
@@ -460,6 +477,7 @@ class AIService:
                 finished = _finalize_page(current_page)
                 current_page = _new_page(stripped[3:].strip())
                 current_mode = 'points'
+                current_field = None
                 return finished
 
             if current_page is None:
@@ -471,6 +489,7 @@ class AIService:
                 or marker in ('大纲要点:', 'outline points:')
             ):
                 current_mode = 'points'
+                current_field = None
                 return None
 
             if (
@@ -478,9 +497,25 @@ class AIService:
                 or marker in ('页面描述:', 'page description:')
             ):
                 current_mode = 'description'
+                current_field = None
                 return None
 
             if current_mode == 'description':
+                if field_pattern:
+                    field_match = field_pattern.match(stripped)
+                    if field_match:
+                        current_field = field_match.group(1)
+                        value = field_match.group(2).strip()
+                        if value:
+                            current_page['extra_fields'][current_field] = value
+                        return None
+
+                if current_field:
+                    current_page['extra_fields'][current_field] = (
+                        current_page['extra_fields'].get(current_field, '') + "\n" + stripped
+                    ).strip()
+                    return None
+
                 current_page['description_lines'].append(line.rstrip())
                 return None
 

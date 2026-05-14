@@ -4,7 +4,7 @@ type ProjectPayload = Record<string, any>
 
 const projects: Record<string, ProjectPayload> = {}
 
-const ssePage = (page: { index: number; title: string; points: string[]; description_text?: string }) =>
+const ssePage = (page: { index: number; title: string; points: string[]; description_text?: string; extra_fields?: Record<string, string> }) =>
   `event: page\ndata: ${JSON.stringify(page)}\n\n`
 
 const sseDone = (projectId: string, pages: any[]) =>
@@ -16,7 +16,9 @@ const sseDone = (projectId: string, pages: any[]) =>
       page_id: `page-${index + 1}`,
       order_index: index,
       outline_content: { title: page.title, points: page.points },
-      description_content: page.description_text ? { text: page.description_text } : undefined,
+      description_content: page.description_text
+        ? { text: page.description_text, ...(page.extra_fields ? { extra_fields: page.extra_fields } : {}) }
+        : undefined,
       status: page.description_text ? 'DESCRIPTION_GENERATED' : 'DRAFT',
       project_id: projectId,
     })),
@@ -128,7 +130,8 @@ test.describe('Home outline SSE handoff', () => {
         index: 0,
         title: '描述拆分页',
         points: ['同一页的大纲'],
-        description_text: '页面标题：描述拆分页\n\n页面文字：\n- 同一页的描述',
+        description_text: '--- 页面文字 ---\n- 同一页的描述\n\n--- 页面文字结束 ---',
+        extra_fields: { '视觉元素': '关键指标卡片' },
       }]
 
       await route.fulfill({
