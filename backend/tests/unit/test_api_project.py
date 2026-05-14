@@ -114,8 +114,7 @@ class TestProjectOutlineStream:
                 yield (
                     '## 第一页\n'
                     '<!-- OUTLINE_POINTS -->\n'
-                    '- 背景\n'
-                    '- 目标\n'
+                    '- Establish the page purpose and connect the audience from context to the main argument.\n'
                     '<!-- PAGE_DESCRIPTION -->\n'
                     '页面标题：第一页\n\n'
                     '页面文字：\n'
@@ -133,7 +132,7 @@ class TestProjectOutlineStream:
         pages = list(service.generate_outline_stream(context, language='zh'))
 
         assert pages[0]['title'] == '第一页'
-        assert pages[0]['points'] == ['背景', '目标']
+        assert pages[0]['points'] == ['Establish the page purpose and connect the audience from context to the main argument.']
         assert '页面标题：第一页' in pages[0]['description_text']
         assert '页面文字：' in pages[0]['description_text']
         assert pages[-1] == {'__stream_complete__': True}

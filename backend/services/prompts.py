@@ -457,31 +457,34 @@ The user has provided the following description text:
 {description_text}
 
 Your task is to first split the description into pages, then produce the outline and the page description for each page from that same split.
-Each output page must contain both the outline points and the page description. The page count is defined by your page split; do not run a separate outline-only split.
+Each output page must contain both an outline-level narrative structure and the page description. The page count is defined by your page split; do not run a separate outline-only split.
 The parser depends on the HTML comment markers below. Do not translate or modify them.
 
 Output rules:
 - Use `# Part Name` for major sections (only if the text has clear parts/chapters)
 - Use `## Page Title` for each page
-- Under each page, output `<!-- OUTLINE_POINTS -->` followed by `- ` bullet points
+- Under each page, output `<!-- OUTLINE_POINTS -->` followed by one or two `- ` bullet points that describe what the slide should cover at the outline level
 - Then output `<!-- PAGE_DESCRIPTION -->` followed by the corresponding page description text
 - Preserve layout, style, material, and content details in the page description
+- Keep the outline points at the same level as normal idea-generated outlines: focus on slide intent, narrative role, topic, logic, transition, or design purpose
+- Do not put final slide copy, exact page text, long evidence lists, or detailed visual/layout instructions in the outline points
+- Put concrete page text, data, examples, layout, style, and material details only in the page description section
 - Use `<!-- PAGE_END -->` after each page
 - Do NOT wrap in code blocks or add any extra text
 
 Example:
-## 标题
+## 市场机会概览
 <!-- OUTLINE_POINTS -->
-- 要点一
-- 要点二
+- Establish why this opportunity matters and how it connects the audience from macro trend to business relevance.
 <!-- PAGE_DESCRIPTION -->
-页面标题：标题
+页面标题：市场机会概览
 
 页面文字：
-- 这一页的正文内容
+- 过去三年目标市场保持高速增长
+- 需求从单点工具转向端到端解决方案
 
 其他页面素材：
-排版、风格、图片素材等要求
+使用趋势图展示增长曲线，整体保持专业克制的商务风格
 <!-- PAGE_END -->
 
 Now split the description text above and output the page-by-page structure. Output `<!-- END -->` on the last line when finished.
