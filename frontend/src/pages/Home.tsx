@@ -221,6 +221,7 @@ export const Home: React.FC = () => {
   useEffect(() => {
     return () => {
       candidatePollActiveRef.current = false;
+      loadingCandidateIdRef.current = null;
     };
   }, []);
 
@@ -380,7 +381,10 @@ export const Home: React.FC = () => {
   // 上传文件
   // 在 Home 页面，文件始终上传为全局文件（不关联项目），因为此时还没有项目
   const handleFileUpload = async (file: File) => {
-    if (isUploadingFile) return;
+    if (isUploadingFile) {
+      show({ message: '已有文件正在上传，请稍后再试', type: 'info' });
+      return;
+    }
 
     // 检查文件大小（前端预检查）
     const maxSize = 200 * 1024 * 1024; // 200MB
@@ -646,8 +650,10 @@ export const Home: React.FC = () => {
         window.setTimeout(poll, 1000);
       });
     } catch (error: any) {
-      console.error('生成模板候选失败:', error);
-      show({ message: `生成模板候选失败: ${error?.message || '未知错误'}`, type: 'error' });
+      if (error?.message !== '候选生成已取消') {
+        console.error('生成模板候选失败:', error);
+        show({ message: `生成模板候选失败: ${error?.message || '未知错误'}`, type: 'error' });
+      }
     } finally {
       if (candidatePollActiveRef.current) {
         setIsGeneratingCandidates(false);
