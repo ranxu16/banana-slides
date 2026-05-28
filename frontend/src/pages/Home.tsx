@@ -83,6 +83,7 @@ const homeI18n = {
         imageUploadFailed: '图片上传失败',
         fileUploadSuccess: '文件上传成功',
         fileUploadFailed: '文件上传失败',
+        fileUploadInProgress: '已有文件正在上传，请稍后再试',
         fileTooLarge: '文件过大：{{size}}MB，最大支持 200MB',
         unsupportedFileType: '不支持的文件类型: {{type}}',
         loadTemplateFailed: '加载模板失败，请重新选择或上传模板',
@@ -160,6 +161,7 @@ const homeI18n = {
         imageUploadFailed: 'Failed to upload image',
         fileUploadSuccess: 'File uploaded successfully',
         fileUploadFailed: 'Failed to upload file',
+        fileUploadInProgress: 'A file is already uploading. Please try again later.',
         fileTooLarge: 'File too large: {{size}}MB, maximum 200MB',
         unsupportedFileType: 'Unsupported file type: {{type}}',
         loadTemplateFailed: 'Failed to load the template. Please select or upload it again',
@@ -373,7 +375,7 @@ export const Home: React.FC = () => {
       await handleFileUpload(file);
     }
 
-    if (unsupportedExts.length > 0 && imageFiles.length === 0 && docFiles.length === 0) {
+    if (unsupportedExts.length > 0) {
       show({ message: t('home.messages.unsupportedFileType', { type: unsupportedExts.join(', ') }), type: 'info' });
     }
   };
@@ -382,7 +384,7 @@ export const Home: React.FC = () => {
   // 在 Home 页面，文件始终上传为全局文件（不关联项目），因为此时还没有项目
   const handleFileUpload = async (file: File) => {
     if (isUploadingFile) {
-      show({ message: '已有文件正在上传，请稍后再试', type: 'info' });
+      show({ message: t('home.messages.fileUploadInProgress'), type: 'info' });
       return;
     }
 
@@ -600,6 +602,8 @@ export const Home: React.FC = () => {
     setCandidateProgress({ total: 5, completed: 0 });
     try {
       const response = await createTemplateCandidates(trimmedPrompt, 5, aspectRatio);
+      if (!candidatePollActiveRef.current) return;
+
       const taskId = response.data?.task_id;
       if (!taskId) {
         setTemplateCandidates(response.data?.candidates || []);
@@ -616,6 +620,11 @@ export const Home: React.FC = () => {
           attempts += 1;
           try {
             const taskResponse = await getTemplateCandidates(taskId);
+            if (!candidatePollActiveRef.current) {
+              reject(new Error('候选生成已取消'));
+              return;
+            }
+
             const data = taskResponse.data;
             const progress = data?.progress;
             if (progress) {
