@@ -1183,7 +1183,7 @@ def generate_template_candidates_task(task_id: str, style_prompt: str, prompt: s
                 'usage': usage,
                 'candidates': [],
             })
-            db.session.commit()
+            _commit_with_retry()
 
             completed = 0
             failed = 0
@@ -1243,7 +1243,7 @@ def generate_template_candidates_task(task_id: str, style_prompt: str, prompt: s
                             'usage': usage,
                             'candidates': ordered_candidates,
                         })
-                        db.session.commit()
+                        _commit_with_retry()
 
             logger.info(
                 "✅ Task %s finished template candidate generation (completed: %s, failed: %s, total: %s)",
@@ -1263,7 +1263,7 @@ def generate_template_candidates_task(task_id: str, style_prompt: str, prompt: s
                 progress = task.get_progress()
                 progress['failed'] = max(1, progress.get('failed', 0))
                 task.set_progress(progress)
-                db.session.commit()
+                _commit_with_retry()
 
 
 def process_material_image_task(

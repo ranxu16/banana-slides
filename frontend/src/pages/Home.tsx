@@ -645,9 +645,11 @@ export const Home: React.FC = () => {
       console.error('生成模板候选失败:', error);
       show({ message: `生成模板候选失败: ${error?.message || '未知错误'}`, type: 'error' });
     } finally {
+      if (candidatePollActiveRef.current) {
+        setIsGeneratingCandidates(false);
+        setCandidateProgress(null);
+      }
       candidatePollActiveRef.current = false;
-      setIsGeneratingCandidates(false);
-      setCandidateProgress(null);
     }
   };
 
@@ -655,16 +657,27 @@ export const Home: React.FC = () => {
     try {
       setSelectedCandidateId(candidate.candidate_id);
       const file = await dataUrlToFile(candidate.image_url, candidate.candidate_id);
-      setSelectedCandidateFile(file);
-      setSelectedTemplate(file);
-      setSelectedTemplateId(null);
-      setSelectedPresetTemplateId(null);
-      show({ message: '已选择模板候选，创建项目后会走现有模板上传流程', type: 'success' });
+
+      setSelectedCandidateId(currentId => {
+        if (currentId === candidate.candidate_id) {
+          setSelectedCandidateFile(file);
+          setSelectedTemplate(file);
+          setSelectedTemplateId(null);
+          setSelectedPresetTemplateId(null);
+          show({ message: '已选择模板候选，创建项目后会走现有模板上传流程', type: 'success' });
+        }
+        return currentId;
+      });
     } catch (error: any) {
       console.error('应用模板候选失败:', error);
-      setSelectedCandidateId(null);
-      setSelectedCandidateFile(null);
-      show({ message: `应用模板候选失败: ${error?.message || '未知错误'}`, type: 'error' });
+      setSelectedCandidateId(currentId => {
+        if (currentId === candidate.candidate_id) {
+          setSelectedCandidateFile(null);
+          show({ message: `应用模板候选失败: ${error?.message || '未知错误'}`, type: 'error' });
+          return null;
+        }
+        return currentId;
+      });
     }
   };
 
