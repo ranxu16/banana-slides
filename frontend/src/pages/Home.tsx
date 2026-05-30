@@ -67,6 +67,7 @@ const homeI18n = {
         generationFailed: '生成模板候选失败: {{error}}',
         selectionSuccess: '已选择模板候选，创建项目后会走现有模板上传流程',
         selectionFailed: '应用模板候选失败: {{error}}',
+        invalidCandidateImage: '模板候选图片响应无效',
         generationTimeout: '模板候选生成超时',
         generationFailedFallback: '模板候选生成失败',
         generateCandidates: '生成 5 个模板候选',
@@ -156,6 +157,7 @@ const homeI18n = {
         generationFailed: 'Failed to generate template candidates: {{error}}',
         selectionSuccess: 'Template candidate selected. Project creation will use the existing template upload flow.',
         selectionFailed: 'Failed to apply template candidate: {{error}}',
+        invalidCandidateImage: 'Template candidate image response is invalid',
         generationTimeout: 'Template candidate generation timed out',
         generationFailedFallback: 'Template candidate generation failed',
         generateCandidates: 'Generate 5 template candidates',
@@ -592,6 +594,9 @@ export const Home: React.FC = () => {
   const dataUrlToFile = async (dataUrl: string, filename: string): Promise<File> => {
     const response = await apiClient.get<Blob>(dataUrl, { responseType: 'blob' });
     const blob = response.data;
+    if (!blob.type.startsWith('image/')) {
+      throw new Error(t('home.template.invalidCandidateImage'));
+    }
     const extension = blob.type === 'image/webp' ? 'webp' : 'png';
     return new File([blob], `${filename}.${extension}`, { type: blob.type || 'image/png' });
   };
