@@ -6,6 +6,7 @@ import { Button, Card, useToast, MaterialGeneratorModal, MaterialCenterModal, Ma
 import { MarkdownTextarea, type MarkdownTextareaRef } from '@/components/shared/MarkdownTextarea';
 import { TemplateSelector, getTemplateFile } from '@/components/shared/TemplateSelector';
 import { listUserTemplates, type UserTemplate, uploadReferenceFile, type ReferenceFile, associateFileToProject, triggerFileParse, associateMaterialsToProject, createPptRenovationProject, createTemplateCandidates, getTemplateCandidates } from '@/api/endpoints';
+import { apiClient } from '@/api/client';
 import { useProjectStore } from '@/store/useProjectStore';
 import { devLog } from '@/utils/logger';
 import { useTheme } from '@/hooks/useTheme';
@@ -210,6 +211,7 @@ export const Home: React.FC = () => {
   const [candidateProgress, setCandidateProgress] = useState<{ total: number; completed: number } | null>(null);
   const [selectedCandidateId, setSelectedCandidateId] = useState<string | null>(null);
   const [selectedCandidateFile, setSelectedCandidateFile] = useState<File | null>(null);
+  const [isFetchingCandidate, setIsFetchingCandidate] = useState(false);
   const [aspectRatio, setAspectRatio] = useState('16:9');
   const [isAspectRatioOpen, setIsAspectRatioOpen] = useState(false);
   const [renovationFile, setRenovationFile] = useState<File | null>(null);
@@ -542,11 +544,13 @@ export const Home: React.FC = () => {
     // 总是设置文件（如果提供）
     if (templateFile) {
       loadingCandidateIdRef.current = null;
+      setIsFetchingCandidate(false);
       setSelectedTemplate(templateFile);
       setSelectedCandidateFile(null);
       setSelectedCandidateId(null);
     } else if (templateId) {
       loadingCandidateIdRef.current = null;
+      setIsFetchingCandidate(false);
       setSelectedTemplate(null);
       setSelectedCandidateFile(null);
       setSelectedCandidateId(null);
@@ -577,11 +581,8 @@ export const Home: React.FC = () => {
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const dataUrlToFile = async (dataUrl: string, filename: string): Promise<File> => {
-    const response = await fetch(dataUrl);
-    if (!response.ok) {
-      throw new Error(`Failed to fetch template candidate image: ${response.statusText}`);
-    }
-    const blob = await response.blob();
+    const response = await apiClient.get<Blob>(dataUrl, { responseType: 'blob' });
+    const blob = response.data;
     const extension = blob.type === 'image/webp' ? 'webp' : 'png';
     return new File([blob], `${filename}.${extension}`, { type: blob.type || 'image/png' });
   };
@@ -599,6 +600,7 @@ export const Home: React.FC = () => {
     setSelectedCandidateId(null);
     setSelectedCandidateFile(null);
     loadingCandidateIdRef.current = null;
+    setIsFetchingCandidate(false);
     setCandidateProgress({ total: 5, completed: 0 });
     try {
       const response = await createTemplateCandidates(trimmedPrompt, 5, aspectRatio);
@@ -683,6 +685,7 @@ export const Home: React.FC = () => {
     try {
       setSelectedCandidateId(candidate.candidate_id);
       loadingCandidateIdRef.current = candidate.candidate_id;
+      setIsFetchingCandidate(true);
       const file = await dataUrlToFile(candidate.image_url, candidate.candidate_id);
 
       if (loadingCandidateIdRef.current === candidate.candidate_id) {
@@ -698,6 +701,10 @@ export const Home: React.FC = () => {
         setSelectedCandidateFile(null);
         setSelectedCandidateId(null);
         show({ message: `应用模板候选失败: ${error?.message || '未知错误'}`, type: 'error' });
+      }
+    } finally {
+      if (loadingCandidateIdRef.current === candidate.candidate_id) {
+        setIsFetchingCandidate(false);
       }
     }
   };
@@ -1238,6 +1245,7 @@ export const Home: React.FC = () => {
                     disabled={
                       !content.trim() ||
                       isUploadingImage ||
+                      isFetchingCandidate ||
                       referenceFiles.some(f => f.parse_status === 'pending' || f.parse_status === 'parsing')
                     }
                     className="shadow-sm dark:shadow-background-primary/30 text-xs md:text-sm px-3 md:px-4"
