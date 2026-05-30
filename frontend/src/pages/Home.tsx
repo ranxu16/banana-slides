@@ -368,6 +368,11 @@ export const Home: React.FC = () => {
   };
 
   const handleDocumentFiles = async (files: File[]) => {
+    if (isUploadingFile) {
+      show({ message: t('home.messages.fileUploadInProgress'), type: 'info' });
+      return;
+    }
+
     const docFiles: File[] = [];
     const unsupportedExts: string[] = [];
 
