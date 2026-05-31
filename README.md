@@ -487,7 +487,8 @@ Python 3.10+ + Flask 3.0 + uv + SQLite
 
 欢迎提出新功能建议或反馈，本人也会~~佛系~~回答大家问题
 
-<img width="312" alt="image" src="https://github.com/user-attachments/assets/535477b7-8c51-4120-9f9c-a40ca01fb040" />
+<img width="312" alt="image" src="https://github.com/user-attachments/assets/0c94e62f-dc68-4b81-9ee8-f53f9ac656ee" />
+
 
 
 
