@@ -1,7 +1,12 @@
 import { create } from 'zustand';
 import type { Project } from '@/types';
 import * as api from '@/api/endpoints';
-import { debounce, normalizeProject, normalizeErrorMessage } from '@/utils';
+import {
+  debounce,
+  downloadFromUrl,
+  normalizeProject,
+  normalizeErrorMessage,
+} from '@/utils';
 import { devLog } from '@/utils/logger';
 import { getT } from '@/utils/i18nHelper';
 
@@ -1235,8 +1240,8 @@ const debouncedUpdatePage = debounce(
         throw new Error(t('store.exportLinkFailed'));
       }
 
-      // 使用浏览器直接下载链接，避免 axios 受带宽和超时影响
-      window.open(downloadUrl, '_blank');
+      const filename = downloadUrl.split('/').pop()?.split('?')[0] || 'presentation.pptx';
+      downloadFromUrl(downloadUrl, filename);
     } catch (error: any) {
       set({ error: error.message || t('store.exportFailed') });
     } finally {
@@ -1260,8 +1265,8 @@ const debouncedUpdatePage = debounce(
         throw new Error(t('store.exportLinkFailed'));
       }
 
-      // 使用浏览器直接下载链接，避免 axios 受带宽和超时影响
-      window.open(downloadUrl, '_blank');
+      const filename = downloadUrl.split('/').pop()?.split('?')[0] || 'presentation.pdf';
+      downloadFromUrl(downloadUrl, filename);
     } catch (error: any) {
       set({ error: error.message || t('store.exportFailed') });
     } finally {

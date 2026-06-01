@@ -598,7 +598,7 @@ test.describe('UI-driven E2E test: From user interface to PPT export', () => {
     console.log('📦 Step 14: Exporting PPT file...')
     
     // Setup download handler
-    const downloadPromise = page.waitForEvent('download', { timeout: 60000 })
+    const downloadPromise = page.context().waitForEvent('download', { timeout: 60000 })
     
     // Step 1: Wait for export button to be enabled (it's disabled until all images are generated)
     const exportBtn = page.locator('button:has-text("导出")')
@@ -726,4 +726,3 @@ test.describe('UI E2E - Simplified (skip long waits)', () => {
     console.log('\n✅ UI flow verification passed!\n')
   })
 })
-
