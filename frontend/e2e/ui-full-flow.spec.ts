@@ -676,6 +676,12 @@ test.describe('UI-driven E2E test: From user interface to PPT export', () => {
     await exportPptxBtn.waitFor({ state: 'visible', timeout: 5000 })
     await exportPptxBtn.click()
     console.log('✓ Clicked "导出为 PPTX" button\n')
+
+    // Step 3: In the PPTX export settings panel, click "开始导出"
+    // The dropdown only opens export options; actual download request is sent after clicking this button.
+    await expect(page.getByText('PPTX 导出设置')).toBeVisible({ timeout: 5000 })
+    await page.getByRole('button', { name: '开始导出' }).click()
+    console.log('✓ Clicked "开始导出" button')
     
     // Wait for download to complete (prefer download event, fallback to direct response body)
     console.log('⏳ Waiting for PPT file download...')
