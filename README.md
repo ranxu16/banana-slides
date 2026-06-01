@@ -551,7 +551,7 @@ Python 3.10+ + Flask 3.0 + uv + SQLite
 </a>
 
 
-感谢<a href="https://api.chatfire.site/login?inviteCode=A15CD6A0">AI火宝</a>对本项目的赞助
+感谢AI火宝对本项目的赞助
  
 </div>
 
