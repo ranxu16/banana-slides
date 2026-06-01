@@ -597,18 +597,47 @@ test.describe('UI-driven E2E test: From user interface to PPT export', () => {
     // ====================================
     console.log('📦 Step 14: Exporting PPT file...')
     
-    // Setup download handler (accept both direct download event and direct file response fallback)
-    const downloadPromise = page.context().waitForEvent('download', { timeout: 60000 }).then((download) => ({
-      kind: 'download' as const,
-      payload: download
-    }))
-    const responsePromise = page.waitForResponse((resp) => {
-      const isPptxFileResponse = /\/files\/.*\/exports\/.*\.pptx/.test(new URL(resp.url()).pathname)
-      return resp.request().method() === 'GET' && resp.status() === 200 && isPptxFileResponse
-    }, { timeout: 60000 }).then((response) => ({
-      kind: 'response' as const,
-      payload: response
-    }))
+    const responsePromise = new Promise<{ kind: 'response', payload: any }>((resolve, reject) => {
+      const onResponse = (response: any) => {
+        try {
+          const pathname = new URL(response.url()).pathname
+          const isPptxFileResponse = /\/files\/.*\/exports\/.*\.pptx/.test(pathname)
+          if (
+            response.request().method() === 'GET' &&
+            response.status() === 200 &&
+            isPptxFileResponse
+          ) {
+            page.context().off('response', onResponse)
+            clearTimeout(timeoutId)
+            resolve({
+              kind: 'response' as const,
+              payload: response
+            })
+          }
+        } catch (error) {
+          // Ignore parse/URL errors and continue waiting
+          void error
+        }
+      }
+
+      const timeoutId = setTimeout(() => {
+        page.context().off('response', onResponse)
+        reject(new Error('Timeout waiting for PPTX export response'))
+      }, 60000)
+
+      page.context().on('response', onResponse)
+    })
+    
+    // Setup download handler (prefer direct download event, fallback to export response)
+    const downloadResult = await Promise.any([
+      page.context().waitForEvent('download', { timeout: 60000 }).then((download) => ({
+        kind: 'download' as const,
+        payload: download
+      })),
+      responsePromise
+    ]).catch((error) => {
+      throw new Error(`Timeout waiting for PPT export: ${error instanceof Error ? error.message : 'unknown error'}`)
+    })
     
     // Step 1: Wait for export button to be enabled (it's disabled until all images are generated)
     const exportBtn = page.locator('button:has-text("导出")')
