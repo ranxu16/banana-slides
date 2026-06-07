@@ -4,6 +4,10 @@ from datetime import datetime, timezone
 from . import db
 
 
+def _utcnow_naive():
+    return datetime.now(timezone.utc).replace(tzinfo=None)
+
+
 class Settings(db.Model):
     """
     Settings model - stores global application settings
@@ -182,7 +186,7 @@ class Settings(db.Model):
         if not self.openai_oauth_access_token:
             return None
         if self.openai_oauth_expires_at:
-            now = datetime.utcnow()
+            now = _utcnow_naive()
             if self.openai_oauth_expires_at < now:
                 if self.openai_oauth_refresh_token:
                     return self._refresh_openai_oauth()
@@ -194,7 +198,7 @@ class Settings(db.Model):
         if not self.openai_oauth_access_token:
             return False
         if self.openai_oauth_expires_at:
-            now = datetime.utcnow()
+            now = _utcnow_naive()
             if self.openai_oauth_expires_at < now and not self.openai_oauth_refresh_token:
                 return False
         return True
@@ -227,7 +231,7 @@ class Settings(db.Model):
                 self.openai_oauth_refresh_token = data['refresh_token']
             expires_in = data.get('expires_in', 3600)
             from datetime import timedelta
-            self.openai_oauth_expires_at = datetime.utcnow() + timedelta(seconds=expires_in)
+            self.openai_oauth_expires_at = _utcnow_naive() + timedelta(seconds=expires_in)
             db.session.commit()
             return self.openai_oauth_access_token
         except requests.exceptions.HTTPError as exc:
