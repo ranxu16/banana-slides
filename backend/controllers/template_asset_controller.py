@@ -214,12 +214,13 @@ def upload_template_pdf(project_id: str):
     file_service = FileService(current_app.config['UPLOAD_FOLDER'])
     try:
         pdf_relpath = file_service.save_template_pdf(file, project_id, task.id)
-    except ValueError as exc:
+    except Exception as exc:
         task.status = 'FAILED'
         task.error_message = str(exc)
         task.completed_at = datetime.utcnow()
         db.session.commit()
-        return bad_request(str(exc))
+        status_code = 400 if isinstance(exc, ValueError) else 500
+        return error_response('UPLOAD_FAILED', str(exc), status_code)
 
     from services.task_manager import (
         task_manager,
@@ -254,7 +255,8 @@ def patch_template_asset(project_id: str, asset_id: str):
 
     touched = False
     if 'user_label' in data:
-        asset.user_label = (data['user_label'] or '').strip() or None
+        val = data['user_label']
+        asset.user_label = (str(val).strip() or None) if val is not None else None
         touched = True
     if 'analysis_notes' in data:
         asset.analysis_notes = data['analysis_notes']
@@ -301,6 +303,8 @@ def delete_template_asset(project_id: str, asset_id: str):
             {
                 Page.template_asset_id: None,
                 Page.template_selection_source: None,
+                Page.template_match_reason: None,
+                Page.template_match_confidence: None,
             },
             synchronize_session=False,
         )

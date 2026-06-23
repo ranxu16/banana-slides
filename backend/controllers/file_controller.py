@@ -65,13 +65,17 @@ def serve_template_asset(project_id, asset_id, filename):
         root = Path(current_app.config['UPLOAD_FOLDER']).resolve()
         file_dir = (root / project_id / 'template-assets' / asset_id).resolve()
 
-        if not str(file_dir).startswith(str(root)):
+        try:
+            file_dir.relative_to(root)
+        except ValueError:
             return error_response('INVALID_PATH', 'Invalid file path', 403)
         if not file_dir.exists() or not file_dir.is_dir():
             return not_found('File')
 
         file_path = (file_dir / safe_filename).resolve()
-        if not str(file_path).startswith(str(file_dir)):
+        try:
+            file_path.relative_to(file_dir)
+        except ValueError:
             return error_response('INVALID_PATH', 'Invalid file path', 403)
         if not file_path.exists() or not file_path.is_file():
             return not_found('File')

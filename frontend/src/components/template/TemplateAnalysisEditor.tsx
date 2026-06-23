@@ -87,8 +87,26 @@ export const TemplateAnalysisEditor: React.FC<TemplateAnalysisEditorProps> = ({
   const failed = asset.analysis_status === 'failed';
   const [draft, setDraft] = useState<TemplateAnalysis>(asset.analysis_json ?? emptyAnalysis);
   const [notes, setNotes] = useState<string>(asset.analysis_notes ?? '');
+  // Keep keywords/palette as raw text while editing so trailing commas and
+  // in-progress entries aren't stripped on every keystroke; parse on save.
+  const [keywordsText, setKeywordsText] = useState<string>(
+    (asset.analysis_json?.style_keywords ?? []).join(', ')
+  );
+  const [paletteText, setPaletteText] = useState<string>(
+    (asset.analysis_json?.color_palette ?? []).join(', ')
+  );
   const [saving, setSaving] = useState(false);
   const [reanalyzing, setReanalyzing] = useState(false);
+
+  // Re-sync local editor state when the asset's analysis changes (e.g. after a
+  // re-analyze completes or a different asset is selected).
+  React.useEffect(() => {
+    const next = asset.analysis_json ?? emptyAnalysis;
+    setDraft(next);
+    setNotes(asset.analysis_notes ?? '');
+    setKeywordsText((next.style_keywords ?? []).join(', '));
+    setPaletteText((next.color_palette ?? []).join(', '));
+  }, [asset.analysis_json, asset.analysis_notes]);
 
   const levelOptions: TemplateAnalysis['content_capacity'][] = ['low', 'medium', 'high'];
 
@@ -119,7 +137,12 @@ export const TemplateAnalysisEditor: React.FC<TemplateAnalysisEditorProps> = ({
   const handleSave = async () => {
     setSaving(true);
     try {
-      await onSave(draft, notes);
+      const finalDraft: TemplateAnalysis = {
+        ...draft,
+        style_keywords: keywordsText.split(',').map((s) => s.trim()).filter(Boolean),
+        color_palette: paletteText.split(',').map((s) => s.trim()).filter(Boolean),
+      };
+      await onSave(finalDraft, notes);
     } finally {
       setSaving(false);
     }
@@ -262,13 +285,8 @@ export const TemplateAnalysisEditor: React.FC<TemplateAnalysisEditorProps> = ({
           </label>
           <input
             className={inputCls}
-            value={draft.style_keywords.join(', ')}
-            onChange={(e) =>
-              updateField(
-                'style_keywords',
-                e.target.value.split(',').map((s) => s.trim()).filter(Boolean)
-              )
-            }
+            value={keywordsText}
+            onChange={(e) => setKeywordsText(e.target.value)}
           />
         </div>
         <div>
@@ -277,13 +295,8 @@ export const TemplateAnalysisEditor: React.FC<TemplateAnalysisEditorProps> = ({
           </label>
           <input
             className={inputCls}
-            value={draft.color_palette.join(', ')}
-            onChange={(e) =>
-              updateField(
-                'color_palette',
-                e.target.value.split(',').map((s) => s.trim()).filter(Boolean)
-              )
-            }
+            value={paletteText}
+            onChange={(e) => setPaletteText(e.target.value)}
           />
         </div>
       </div>
