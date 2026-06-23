@@ -161,27 +161,50 @@ export const DescriptionCard: React.FC<DescriptionCardProps> = React.memo(({
 
   return (
     <>
-      <Card className="p-0 overflow-hidden flex flex-col">
+      <Card className="p-0 overflow-hidden flex flex-col transition-all duration-200 hover:shadow-lg hover:border-banana-200 dark:hover:border-banana-700">
         {/* 标题栏 */}
-        <div className="bg-banana-50 dark:bg-background-hover px-4 py-3 border-b border-gray-100 dark:border-border-primary">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <span className="font-semibold text-gray-900 dark:text-foreground-primary">{t('descriptionCard.page', { num: index + 1 })}</span>
-              {index === 0 && (
-                <span
-                  className="text-xs px-1.5 py-0.5 bg-banana-100 dark:bg-banana-900/30 text-banana-700 dark:text-banana-400 rounded"
-                  title={t('descriptionCard.coverPageTooltip')}
-                >
-                  {t('descriptionCard.coverPage')}
-                </span>
-              )}
-              {page.part && (
-                <span className="text-xs px-2 py-0.5 bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400 rounded">
-                  {page.part}
-                </span>
-              )}
-            </div>
+        <div className="flex items-center justify-between gap-2 px-4 pt-3.5 pb-3 border-b border-gray-100 dark:border-border-primary">
+          <div className="flex items-center gap-2 min-w-0">
+            <span className="grid place-items-center w-7 h-7 shrink-0 rounded-lg text-[13px] font-bold text-gray-900 dark:text-banana-300 bg-banana-50 dark:bg-banana-900/30 border border-banana-200 dark:border-banana-700">
+              {String(index + 1).padStart(2, '0')}
+            </span>
+            {index === 0 && (
+              <span
+                className="text-xs px-1.5 py-0.5 bg-banana-100 dark:bg-banana-900/30 text-banana-700 dark:text-banana-400 rounded"
+                title={t('descriptionCard.coverPageTooltip')}
+              >
+                {t('descriptionCard.coverPage')}
+              </span>
+            )}
+            {page.part && (
+              <span className="text-xs px-2 py-0.5 bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400 rounded truncate">
+                {page.part}
+              </span>
+            )}
             <ContextualStatusBadge page={page} context="description" />
+          </div>
+          {/* 操作：始终可见的图标按钮（移动端友好） */}
+          <div className="flex items-center gap-0.5 shrink-0">
+            <button
+              type="button"
+              onClick={handleEdit}
+              disabled={generating}
+              title={t('common.edit')}
+              aria-label={t('common.edit')}
+              className="w-7 h-7 grid place-items-center rounded-lg text-gray-400 hover:text-gray-700 dark:hover:text-foreground-primary hover:bg-gray-100 dark:hover:bg-background-hover transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              <Edit2 size={15} />
+            </button>
+            <button
+              type="button"
+              onClick={onRegenerate}
+              disabled={generating}
+              title={t('descriptionCard.regenerate')}
+              aria-label={t('descriptionCard.regenerate')}
+              className="w-7 h-7 grid place-items-center rounded-lg text-gray-400 hover:text-gray-700 dark:hover:text-foreground-primary hover:bg-gray-100 dark:hover:bg-background-hover transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              <RefreshCw size={15} className={generating ? 'animate-spin' : ''} />
+            </button>
           </div>
         </div>
 
@@ -225,33 +248,13 @@ export const DescriptionCard: React.FC<DescriptionCardProps> = React.memo(({
               })}
             </div>
           ) : (
-            <div className="text-center py-8 text-gray-400 dark:text-foreground-tertiary">
-              <div className="flex text-3xl mb-2 justify-center"><FileText className="text-gray-400 dark:text-foreground-tertiary" size={48} /></div>
-              <p className="text-sm">{t('descriptionCard.noDescription')}</p>
+            <div className="flex flex-col items-center justify-center text-center py-10">
+              <div className="w-11 h-11 grid place-items-center rounded-2xl bg-banana-50 dark:bg-banana-900/20 mb-3">
+                <FileText size={20} className="text-banana-500" />
+              </div>
+              <p className="text-sm text-gray-400 dark:text-foreground-tertiary">{t('descriptionCard.noDescription')}</p>
             </div>
           )}
-        </div>
-
-        {/* 操作栏 */}
-        <div className="border-t border-gray-100 dark:border-border-primary px-4 py-3 flex justify-end gap-2 mt-auto">
-          <Button
-            variant="ghost"
-            size="sm"
-            icon={<Edit2 size={16} />}
-            onClick={handleEdit}
-            disabled={generating}
-          >
-            {t('common.edit')}
-          </Button>
-          <Button
-            variant="ghost"
-            size="sm"
-            icon={<RefreshCw size={16} className={generating ? 'animate-spin' : ''} />}
-            onClick={onRegenerate}
-            disabled={generating}
-          >
-            {generating ? t('common.generating') : t('descriptionCard.regenerate')}
-          </Button>
         </div>
       </Card>
 

@@ -1,6 +1,6 @@
 import React, { useEffect, useCallback, useState, useRef } from 'react';
 import { useNavigate, useParams, useLocation } from 'react-router-dom';
-import { ArrowLeft, ArrowRight, FileText, Sparkles, Download, Upload, ChevronDown, Settings2, X, Plus, HelpCircle, ImageIcon } from 'lucide-react';
+import { ArrowLeft, ArrowRight, FileText, Sparkles, Download, Upload, MoreHorizontal, PenLine, Settings2, X, Plus, HelpCircle, ImageIcon } from 'lucide-react';
 import { useT } from '@/hooks/useT';
 import { MarkdownTextarea, type MarkdownTextareaRef } from '@/components/shared/MarkdownTextarea';
 import PresetCapsules from '@/components/shared/PresetCapsules';
@@ -20,7 +20,7 @@ const detailI18n = {
   zh: {
     home: { title: '蕉幻' },
     detail: {
-      title: "编辑页面描述", pageCount: "共 {{count}} 页", generateImages: "生成图片",
+      title: "编辑页面描述", sectionTitle: "页面描述", pageCount: "共 {{count}} 页", generateImages: "生成图片",
       generating: "生成中...", page: "第 {{num}} 页", titleLabel: "标题",
       description: "描述", batchGenerate: "批量生成描述", export: "导出描述", exportFull: "导出大纲和描述", import: "导入", importExport: "导入/导出",
       pagesCompleted: "页已完成", noPages: "还没有页面",
@@ -71,7 +71,7 @@ const detailI18n = {
   en: {
     home: { title: 'Banana Slides' },
     detail: {
-      title: "Edit Descriptions", pageCount: "{{count}} pages", generateImages: "Generate Images",
+      title: "Edit Descriptions", sectionTitle: "Page Descriptions", pageCount: "{{count}} pages", generateImages: "Generate Images",
       generating: "Generating...", page: "Page {{num}}", titleLabel: "Title",
       description: "Description", batchGenerate: "Batch Generate Descriptions", export: "Export Descriptions", exportFull: "Export Outline & Descriptions", import: "Import", importExport: "Import/Export",
       pagesCompleted: "pages completed", noPages: "No pages yet",
@@ -121,7 +121,7 @@ const detailI18n = {
     }
   }
 };
-import { Button, Loading, useToast, useConfirm, AiRefineInput, FilePreviewModal, ReferenceFileList, MaterialSelector, ImportMarkdownModal } from '@/components/shared';
+import { Button, Logo, Loading, useToast, useConfirm, AiRefineInput, FilePreviewModal, ReferenceFileList, MaterialSelector, ImportMarkdownModal } from '@/components/shared';
 import { DescriptionCard } from '@/components/preview/DescriptionCard';
 import { useProjectStore } from '@/store/useProjectStore';
 import { refineDescriptions, getTaskStatus, addPage, updateProject, getSettings, updateSettings } from '@/api/endpoints';
@@ -196,6 +196,24 @@ const SortableFieldPill: React.FC<{
         </span>
       )}
     </button>
+  );
+};
+
+// 顶栏进度环：直观呈现「已完成 / 总数」，替代纯文字计数
+const ProgressRing: React.FC<{ completed: number; total: number; label: string }> = ({ completed, total, label }) => {
+  const r = 13;
+  const c = 2 * Math.PI * r;
+  const pct = total > 0 ? completed / total : 0;
+  return (
+    <div className="flex items-center gap-1.5 pr-0.5" title={label}>
+      <svg width="28" height="28" viewBox="0 0 32 32" className="-rotate-90">
+        <circle cx="16" cy="16" r={r} fill="none" stroke="currentColor" strokeWidth="3.5" className="text-gray-200 dark:text-border-primary" />
+        <circle cx="16" cy="16" r={r} fill="none" stroke="currentColor" strokeWidth="3.5" strokeLinecap="round" className="text-banana-500 transition-all duration-500" strokeDasharray={c} strokeDashoffset={c * (1 - pct)} />
+      </svg>
+      <span className="text-[13px] font-bold leading-none text-gray-900 dark:text-foreground-primary">
+        {completed}<span className="text-gray-400 dark:text-foreground-tertiary font-medium">/{total}</span>
+      </span>
+    </div>
   );
 };
 
@@ -581,6 +599,9 @@ export const DetailEditor: React.FC = () => {
     (p) => p.description_content
   );
   const missingDescCount = currentProject.pages.filter(p => !p.description_content).length;
+  const totalPages = currentProject.pages.length;
+  const completedCount = totalPages - missingDescCount;
+  const progressLabel = `${completedCount} / ${totalPages} ${t('detail.pagesCompleted')}`;
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-background-primary flex flex-col">
@@ -605,12 +626,11 @@ export const DetailEditor: React.FC = () => {
             >
               <span className="hidden sm:inline">{t('common.back')}</span>
             </Button>
-            <div className="flex items-center gap-1.5 md:gap-2">
-              <span className="text-xl md:text-2xl">🍌</span>
-              <span className="text-base md:text-xl font-bold">{t('home.title')}</span>
-            </div>
-            <span className="text-gray-400 hidden lg:inline">|</span>
-            <span className="text-sm md:text-lg font-semibold hidden lg:inline">{t('detail.title')}</span>
+            <Logo wordmark={t('home.title')} size={28} />
+            <span className="hidden lg:inline-flex items-center gap-1.5 ml-1 px-2.5 h-7 rounded-lg text-[13px] font-medium text-gray-600 dark:text-foreground-secondary bg-gray-100 dark:bg-background-hover">
+              <PenLine size={13} />
+              {t('detail.title')}
+            </span>
           </div>
           
           {/* 中间：AI 修改输入框 */}
@@ -625,8 +645,13 @@ export const DetailEditor: React.FC = () => {
             />
           </div>
 
-          {/* 右侧：操作按钮 */}
+          {/* 右侧：进度环 + 操作按钮 */}
           <div className="flex items-center gap-1.5 md:gap-2 flex-shrink-0">
+            {totalPages > 0 && (
+              <div className="hidden sm:block">
+                <ProgressRing completed={completedCount} total={totalPages} label={progressLabel} />
+              </div>
+            )}
             <Button
               variant="secondary"
               size="sm"
@@ -694,26 +719,39 @@ export const DetailEditor: React.FC = () => {
             </div>
           </div>
         ) : (
-        <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2 sm:gap-3">
-          <div className="flex items-center gap-2 sm:gap-3 flex-1">
+        <div className="flex items-center justify-between gap-3">
+          {/* 左：区块标题 */}
+          <div className="min-w-0">
+            <h2 className="text-[17px] md:text-[19px] font-bold tracking-tight text-gray-900 dark:text-foreground-primary leading-tight truncate">
+              {t('detail.sectionTitle')}
+            </h2>
+            <p className="hidden sm:block text-xs text-gray-500 dark:text-foreground-tertiary mt-0.5">
+              {t('detail.pageCount', { count: totalPages })}
+            </p>
+          </div>
+          {/* 右：操作 */}
+          <div className="flex items-center gap-2 flex-shrink-0">
             <Button
               variant="primary"
               icon={<Sparkles size={16} className="md:w-[18px] md:h-[18px]" />}
               onClick={handleGenerateAll}
-              className="flex-1 sm:flex-initial text-sm md:text-base"
+              className="text-sm md:text-base"
             >
               {t('detail.batchGenerate')}
             </Button>
 
             {/* 描述设置面板 */}
             <div className="relative" ref={settingsRef}>
-              <Button
-                variant="ghost"
-                size="sm"
+              <button
+                type="button"
                 onClick={() => setSettingsOpen(!settingsOpen)}
-                icon={<span className="relative"><Settings2 size={16} />{descRequirements && <span className="absolute -top-0.5 -right-0.5 w-1.5 h-1.5 rounded-full bg-banana-400" />}</span>}
                 title={t('detail.descSettings')}
-              />
+                aria-label={t('detail.descSettings')}
+                className="relative w-10 h-10 grid place-items-center rounded-xl border border-gray-200 dark:border-border-primary bg-white dark:bg-background-secondary text-gray-600 dark:text-foreground-secondary hover:bg-gray-50 dark:hover:bg-background-hover transition-colors"
+              >
+                <Settings2 size={18} />
+                {descRequirements && <span className="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-banana-400 ring-2 ring-white dark:ring-background-secondary" />}
+              </button>
               {settingsOpen && (
                 <div className="absolute top-full left-0 mt-1 z-50 w-80 rounded-xl border border-gray-200 dark:border-border-primary bg-white dark:bg-background-secondary shadow-lg dark:shadow-none p-4 space-y-4">
                   {/* 生成模式 */}
@@ -872,18 +910,17 @@ export const DetailEditor: React.FC = () => {
               )}
             </div>
 
-            <div className="w-px h-6 bg-gray-200 dark:bg-border-primary flex-shrink-0" />
-            {/* 导入导出下拉菜单 */}
+            {/* 导入/导出溢出菜单 */}
             <div className="relative" ref={fileMenuRef}>
-              <Button
-                variant="secondary"
+              <button
+                type="button"
                 onClick={() => setFileMenuOpen(!fileMenuOpen)}
-                icon={<FileText size={16} className="md:w-[18px] md:h-[18px]" />}
-                className="text-sm md:text-base"
+                title={t('detail.importExport')}
+                aria-label={t('detail.importExport')}
+                className="w-10 h-10 grid place-items-center rounded-xl border border-gray-200 dark:border-border-primary bg-white dark:bg-background-secondary text-gray-600 dark:text-foreground-secondary hover:bg-gray-50 dark:hover:bg-background-hover transition-colors"
               >
-                {t('detail.importExport')}
-                <ChevronDown size={14} className={`ml-1 transition-transform duration-200 ${fileMenuOpen ? 'rotate-180' : ''}`} />
-              </Button>
+                <MoreHorizontal size={18} />
+              </button>
               {fileMenuOpen && (
                 <div className="absolute top-full right-0 mt-1 z-50 min-w-[160px] rounded-lg border border-gray-200 dark:border-border-primary bg-white dark:bg-background-secondary shadow-lg dark:shadow-none overflow-hidden">
                   <button
@@ -916,10 +953,6 @@ export const DetailEditor: React.FC = () => {
                 </div>
               )}
             </div>
-            <span className="text-xs md:text-sm text-gray-500 dark:text-foreground-tertiary whitespace-nowrap">
-              {currentProject.pages.filter((p) => p.description_content).length} /{' '}
-              {currentProject.pages.length} {t('detail.pagesCompleted')}
-            </span>
           </div>
         </div>
         )}
