@@ -44,7 +44,7 @@ export const IconButton: React.FC<IconButtonProps> = ({
   disabled,
   ...props
 }) => (
-  <span className="group relative inline-flex">
+  <span className={cn('group relative inline-flex', className)}>
     <button
       type="button"
       aria-label={label}
@@ -53,8 +53,7 @@ export const IconButton: React.FC<IconButtonProps> = ({
         'inline-flex items-center justify-center rounded-lg transition-colors duration-150 focus:outline-none focus-visible:ring-2 focus-visible:ring-banana-500 disabled:cursor-not-allowed disabled:opacity-40',
         sizeClass[size],
         variantClass[variant],
-        active && 'bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-100',
-        className
+        active && 'bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-100'
       )}
       {...props}
     >

@@ -569,6 +569,12 @@ export const TemplateSetupPage: React.FC = () => {
                           placeholder={t('ts.stylePlaceholder')}
                           value={styleDraft}
                           onChange={(e) => setStyleDraft(e.target.value)}
+                          onKeyDown={(e) => {
+                            if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
+                              e.preventDefault();
+                              handleSaveStyle(pageId);
+                            }
+                          }}
                           autoFocus
                         />
                         <Button variant="primary" size="sm" onClick={() => handleSaveStyle(pageId)}>
