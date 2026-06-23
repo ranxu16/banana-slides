@@ -6,6 +6,7 @@ import logging
 import os
 import shutil
 import threading
+import uuid
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from contextlib import contextmanager
 from typing import Callable, List, Dict, Any, Optional
@@ -15,7 +16,7 @@ import time
 from sqlalchemy import func
 from sqlalchemy.exc import OperationalError
 from PIL import Image, ImageDraw, ImageFilter
-from models import db, Task, Page, Material, PageImageVersion, Settings
+from models import db, Task, Page, Material, PageImageVersion, Settings, ProjectTemplateAsset
 from utils import get_filtered_pages
 from utils.image_utils import check_image_resolution
 
@@ -2156,3 +2157,273 @@ def export_video_task(
             if placeholder_dir and os.path.exists(placeholder_dir):
                 import shutil
                 shutil.rmtree(placeholder_dir, ignore_errors=True)
+
+
+# ============================================================================
+# Per-page template tasks
+# ============================================================================
+
+
+def _set_task_processing(task_id: str) -> None:
+    task = Task.query.get(task_id)
+    if task and task.status == 'PENDING':
+        task.status = 'PROCESSING'
+        db.session.commit()
+
+
+def process_template_pdf_split_task(task_id: str, project_id: str,
+                                    pdf_relpath: str, file_service, app):
+    """SPLIT_TEMPLATE_PDF — render each page as PNG, import into asset library.
+
+    Each successful page becomes a `ProjectTemplateAsset(source='pdf_split')`
+    and triggers its own `analyze_template_task`. Per-page failures are kept
+    in `progress.failed` but do not abort the whole task.
+    """
+    if app is None:
+        raise ValueError('Flask app instance must be provided')
+
+    from services.pdf_image_service import pdf_to_page_images
+    from services.ai_service import AIService
+
+    with app.app_context():
+        task = Task.query.get(task_id)
+        if not task:
+            return
+
+        try:
+            _set_task_processing(task_id)
+
+            pdf_abs = file_service.get_absolute_path(pdf_relpath)
+            output_dir = file_service.get_template_pdf_temp_dir(project_id, task_id)
+
+            try:
+                renders = pdf_to_page_images(pdf_abs, str(output_dir))
+            except ValueError as exc:
+                # E.g. > max_pages — fail the whole task
+                task = Task.query.get(task_id)
+                if task:
+                    task.status = 'FAILED'
+                    task.error_message = str(exc)
+                    task.completed_at = datetime.utcnow()
+                    db.session.commit()
+                return
+
+            total = len(renders)
+            completed = 0
+            failed = 0
+            created_asset_ids = []
+
+            # Determine starting sort_order so PDF-imported assets append cleanly
+            base_sort = (
+                db.session.query(func.coalesce(func.max(ProjectTemplateAsset.sort_order), -1))
+                .filter(ProjectTemplateAsset.project_id == project_id)
+                .scalar()
+            ) + 1
+
+            ai_service = AIService()
+
+            task = Task.query.get(task_id)
+            if task:
+                task.set_progress({
+                    'total': total,
+                    'completed': 0,
+                    'failed': 0,
+                    'created_asset_ids': [],
+                })
+                db.session.commit()
+
+            for render in renders:
+                page_index = render['index']
+                src_path = render.get('path')
+                if not src_path:
+                    failed += 1
+                    task = Task.query.get(task_id)
+                    if task:
+                        task.update_progress(completed=completed, failed=failed)
+                        db.session.commit()
+                    continue
+
+                asset_id = str(uuid.uuid4())
+                try:
+                    image_path, thumb_path = file_service.save_template_asset_from_path(
+                        src_path, project_id, asset_id
+                    )
+                    asset = ProjectTemplateAsset(
+                        id=asset_id,
+                        project_id=project_id,
+                        image_path=image_path,
+                        thumb_path=thumb_path,
+                        source='pdf_split',
+                        source_pdf_id=task_id,
+                        source_page_index=page_index,
+                        analysis_status='pending',
+                        sort_order=base_sort + page_index - 1,
+                    )
+                    db.session.add(asset)
+                    db.session.commit()
+                    created_asset_ids.append(asset_id)
+                    completed += 1
+                except Exception as exc:
+                    logger.warning('Failed to import PDF page %s as asset: %s',
+                                   page_index, exc)
+                    db.session.rollback()
+                    failed += 1
+                    task = Task.query.get(task_id)
+                    if task:
+                        task.update_progress(completed=completed, failed=failed)
+                        db.session.commit()
+                    continue
+
+                task = Task.query.get(task_id)
+                if task:
+                    progress = task.get_progress()
+                    progress.update({
+                        'total': total,
+                        'completed': completed,
+                        'failed': failed,
+                        'created_asset_ids': list(created_asset_ids),
+                    })
+                    task.set_progress(progress)
+                    db.session.commit()
+
+                # Fire per-asset analyze task. Failure here is non-fatal.
+                try:
+                    sub_task = Task(
+                        project_id=project_id,
+                        task_type='ANALYZE_TEMPLATE',
+                        status='PENDING',
+                    )
+                    sub_task.set_progress({'asset_id': asset_id, 'stage': 'queued'})
+                    db.session.add(sub_task)
+                    db.session.commit()
+                    task_manager.submit_task(
+                        sub_task.id,
+                        analyze_template_task,
+                        project_id,
+                        asset_id,
+                        ai_service,
+                        file_service,
+                        app,
+                    )
+                except Exception as exc:
+                    logger.warning('Failed to enqueue analyze for asset %s: %s',
+                                   asset_id, exc)
+
+            file_service.cleanup_template_pdf_temp(project_id, task_id)
+
+            task = Task.query.get(task_id)
+            if task:
+                task.status = 'COMPLETED' if failed < total else 'FAILED'
+                task.completed_at = datetime.utcnow()
+                task.set_progress({
+                    'total': total,
+                    'completed': completed,
+                    'failed': failed,
+                    'created_asset_ids': created_asset_ids,
+                })
+                if failed >= total:
+                    task.error_message = 'All PDF pages failed to render'
+                db.session.commit()
+
+        except Exception as exc:
+            import traceback
+            logger.error('SPLIT_TEMPLATE_PDF task %s crashed: %s',
+                         task_id, traceback.format_exc())
+            task = Task.query.get(task_id)
+            if task:
+                task.status = 'FAILED'
+                task.error_message = str(exc)
+                task.completed_at = datetime.utcnow()
+                db.session.commit()
+
+
+def analyze_template_task(task_id: str, project_id: str, asset_id: str,
+                          ai_service, file_service, app):
+    """ANALYZE_TEMPLATE — Phase C stub. Phase D will replace with real LLM call.
+
+    For now this marks the asset analysis as pending → completed with empty
+    result so the UI flow can be exercised end-to-end. Phase D will fill in
+    the prompt + response handling.
+    """
+    if app is None:
+        raise ValueError('Flask app instance must be provided')
+    with app.app_context():
+        task = Task.query.get(task_id)
+        if not task:
+            return
+        try:
+            _set_task_processing(task_id)
+            task.set_progress({'asset_id': asset_id, 'stage': 'calling_ai'})
+            db.session.commit()
+
+            asset = ProjectTemplateAsset.query.get(asset_id)
+            if not asset:
+                raise ValueError(f'Asset {asset_id} no longer exists')
+
+            # Phase D will replace this stub with the real ai_service.analyze_template
+            asset.analysis_status = 'pending'  # leave as pending; Phase D drives to completed
+            asset.analysis_error = None
+            db.session.commit()
+
+            task.status = 'COMPLETED'
+            task.completed_at = datetime.utcnow()
+            task.set_progress({'asset_id': asset_id, 'stage': 'done'})
+            db.session.commit()
+        except Exception as exc:
+            import traceback
+            logger.error('ANALYZE_TEMPLATE task %s crashed: %s',
+                         task_id, traceback.format_exc())
+            asset = ProjectTemplateAsset.query.get(asset_id)
+            if asset:
+                asset.analysis_status = 'failed'
+                asset.analysis_error = str(exc)
+                db.session.commit()
+            task = Task.query.get(task_id)
+            if task:
+                task.status = 'FAILED'
+                task.error_message = str(exc)
+                task.completed_at = datetime.utcnow()
+                task.set_progress({'asset_id': asset_id, 'stage': 'failed'})
+                db.session.commit()
+
+
+def auto_match_templates_task(task_id: str, project_id: str,
+                              page_id: Optional[str],
+                              overwrite_existing: bool,
+                              preserve_non_empty: bool,
+                              ai_service, app):
+    """AUTO_MATCH_TEMPLATES — Phase C stub. Phase D will implement real matching."""
+    if app is None:
+        raise ValueError('Flask app instance must be provided')
+    with app.app_context():
+        task = Task.query.get(task_id)
+        if not task:
+            return
+        try:
+            _set_task_processing(task_id)
+            if page_id:
+                pages = Page.query.filter_by(id=page_id, project_id=project_id).all()
+            else:
+                pages = Page.query.filter_by(project_id=project_id).all()
+            total = len(pages)
+            task.set_progress({
+                'total_pages': total,
+                'matched': 0,
+                'undecided': total,
+                'batch_index': 0,
+                'batch_total': 1,
+                'scope': 'page' if page_id else 'project',
+            })
+            task.status = 'COMPLETED'
+            task.completed_at = datetime.utcnow()
+            db.session.commit()
+        except Exception as exc:
+            import traceback
+            logger.error('AUTO_MATCH_TEMPLATES task %s crashed: %s',
+                         task_id, traceback.format_exc())
+            task = Task.query.get(task_id)
+            if task:
+                task.status = 'FAILED'
+                task.error_message = str(exc)
+                task.completed_at = datetime.utcnow()
+                db.session.commit()
