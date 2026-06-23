@@ -2343,8 +2343,6 @@ def process_template_pdf_split_task(task_id: str, project_id: str,
                     # break the remaining iterations of this loop.
                     db.session.rollback()
 
-            file_service.cleanup_template_pdf_temp(project_id, task_id)
-
             task = Task.query.get(task_id)
             if task:
                 task.status = 'COMPLETED' if failed < total else 'FAILED'
@@ -2369,6 +2367,9 @@ def process_template_pdf_split_task(task_id: str, project_id: str,
                 task.error_message = str(exc)
                 task.completed_at = datetime.utcnow()
                 db.session.commit()
+        finally:
+            # Always remove the PDF scratch dir, even if rendering crashed.
+            file_service.cleanup_template_pdf_temp(project_id, task_id)
 
 
 def analyze_template_task(task_id: str, project_id: str, asset_id: str,

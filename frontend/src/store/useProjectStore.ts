@@ -1480,8 +1480,11 @@ const debouncedUpdatePage = debounce(
   pollTemplateTask: async (taskId, projectId, onProgress) => {
     // Cap the loop so a stuck/dead worker can't poll forever (~15 min).
     const MAX_ATTEMPTS = 450;
+    // Tolerate a few transient network errors before giving up.
+    const MAX_CONSECUTIVE_ERRORS = 5;
     return new Promise<Task>((resolve, reject) => {
       let attempts = 0;
+      let consecutiveErrors = 0;
       const poll = async () => {
         // Stop polling if the user navigated to a different project so we
         // don't keep firing requests for a screen that's no longer visible.
@@ -1496,6 +1499,7 @@ const debouncedUpdatePage = debounce(
         }
         try {
           const response = await api.getTaskStatus(projectId, taskId);
+          consecutiveErrors = 0;
           const task = response.data;
           if (!task) {
             setTimeout(poll, 2000);
@@ -1510,7 +1514,12 @@ const debouncedUpdatePage = debounce(
             setTimeout(poll, 2000);
           }
         } catch (error: any) {
-          reject(error);
+          consecutiveErrors++;
+          if (consecutiveErrors >= MAX_CONSECUTIVE_ERRORS) {
+            reject(error);
+          } else {
+            setTimeout(poll, 2000);
+          }
         }
       };
       poll();

@@ -433,6 +433,11 @@ export const TemplateSetupPage: React.FC = () => {
                                   updateTemplateAsset(projectId, asset.id, { user_label: v || null });
                                 }
                               }}
+                              onKeyDown={(e) => {
+                                if (e.key === 'Enter') {
+                                  e.currentTarget.blur();
+                                }
+                              }}
                             />
                             <span
                               className={cn(
