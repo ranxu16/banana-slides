@@ -42,6 +42,7 @@ const i18n = {
       uploading: '上传中…',
       pdfProcessing: 'PDF 解析中…',
       emptyLibrary: '模板库为空，上传图片或 PDF 开始',
+      emptyPages: '暂无页面，先在大纲或描述编辑器生成页面',
       labelPlaceholder: '模板标记（可选）',
       delete: '删除',
       reanalyze: '重新解析',
@@ -85,6 +86,7 @@ const i18n = {
       uploading: 'Uploading…',
       pdfProcessing: 'Splitting PDF…',
       emptyLibrary: 'Library is empty, upload an image or PDF to start',
+      emptyPages: 'No pages yet — generate them in the outline or description editor',
       labelPlaceholder: 'Template label (optional)',
       delete: 'Delete',
       reanalyze: 'Re-analyze',
@@ -502,6 +504,11 @@ export const TemplateSetupPage: React.FC = () => {
             <h2 className="text-sm font-semibold text-gray-700 dark:text-foreground-secondary">
               {t('ts.pages')}
             </h2>
+            {pages.length === 0 ? (
+              <p className="rounded-xl border border-dashed border-gray-200 py-12 text-center text-sm text-gray-500 dark:border-gray-700 dark:text-gray-400">
+                {t('ts.emptyPages')}
+              </p>
+            ) : (
             <div className="space-y-2">
               {pages.map((page, idx) => {
                 const pageId = page.id || page.page_id;
@@ -591,6 +598,7 @@ export const TemplateSetupPage: React.FC = () => {
                 );
               })}
             </div>
+            )}
           </section>
         </div>
       </main>
