@@ -66,7 +66,7 @@ test.describe('DetailEditor redesign', () => {
     await expect(page.getByText(DESC_1)).toBeVisible({ timeout: 10000 })
   }
 
-  test('header shows brand Logo, breadcrumb and progress ring', async ({ page }) => {
+  test('header shows brand Logo and section title with progress', async ({ page }) => {
     await gotoDetail(page)
 
     // Brand logo image (replaces the old 🍌 emoji)
@@ -78,10 +78,8 @@ test.describe('DetailEditor redesign', () => {
       page.getByRole('heading', { name: /页面描述|Page Descriptions/ })
     ).toBeVisible()
 
-    // Progress ring reflects 2 of 3 pages completed
-    const ring = page.locator('header svg').first()
-    await expect(ring).toBeVisible()
-    await expect(page.locator('header').getByText('/3')).toBeVisible()
+    // Progress shown as plain text — 2 of 3 pages completed
+    await expect(page.getByText(/2 \/ 3/)).toBeVisible()
   })
 
   test('settings icon button toggles the requirements popover', async ({ page }) => {

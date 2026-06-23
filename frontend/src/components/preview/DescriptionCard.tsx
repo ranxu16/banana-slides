@@ -88,6 +88,7 @@ export const DescriptionCard: React.FC<DescriptionCardProps> = React.memo(({
 
   const text = getDescriptionText(page.description_content);
   const extraFields = getExtraFields(page.description_content);
+  const pageTitle = page.outline_content?.title?.trim() || '';
 
   const [isEditing, setIsEditing] = useState(false);
   const [editContent, setEditContent] = useState('');
@@ -161,27 +162,27 @@ export const DescriptionCard: React.FC<DescriptionCardProps> = React.memo(({
 
   return (
     <>
-      <Card className="p-0 overflow-hidden flex flex-col transition-all duration-200 hover:shadow-lg hover:border-banana-200 dark:hover:border-banana-700">
+      <Card className="p-0 overflow-hidden flex flex-col transition-shadow duration-200 hover:shadow-md">
         {/* 标题栏 */}
-        <div className="flex items-center justify-between gap-2 px-4 pt-3.5 pb-3 border-b border-gray-100 dark:border-border-primary">
-          <div className="flex items-center gap-2 min-w-0">
-            <span className="grid place-items-center w-7 h-7 shrink-0 rounded-lg text-[13px] font-bold text-gray-900 dark:text-banana-300 bg-banana-50 dark:bg-banana-900/30 border border-banana-200 dark:border-banana-700">
+        <div className="flex items-center justify-between gap-2 px-4 py-3 border-b border-gray-100 dark:border-border-primary">
+          <div className="flex items-center gap-2.5 min-w-0">
+            <span className="shrink-0 text-xs font-semibold tabular-nums text-gray-400 dark:text-foreground-tertiary">
               {String(index + 1).padStart(2, '0')}
+            </span>
+            <span className="truncate text-sm font-medium text-gray-800 dark:text-foreground-secondary">
+              {pageTitle || t('descriptionCard.page', { num: index + 1 })}
             </span>
             {index === 0 && (
               <span
-                className="text-xs px-1.5 py-0.5 bg-banana-100 dark:bg-banana-900/30 text-banana-700 dark:text-banana-400 rounded"
+                className="shrink-0 text-[11px] px-1.5 py-0.5 rounded text-banana-700 dark:text-banana-400 bg-banana-50 dark:bg-banana-900/30"
                 title={t('descriptionCard.coverPageTooltip')}
               >
                 {t('descriptionCard.coverPage')}
               </span>
             )}
-            {page.part && (
-              <span className="text-xs px-2 py-0.5 bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400 rounded truncate">
-                {page.part}
-              </span>
+            {(generating || page.status === 'FAILED') && (
+              <ContextualStatusBadge page={page} context="description" />
             )}
-            <ContextualStatusBadge page={page} context="description" />
           </div>
           {/* 操作：始终可见的图标按钮（移动端友好） */}
           <div className="flex items-center gap-0.5 shrink-0">
@@ -191,9 +192,9 @@ export const DescriptionCard: React.FC<DescriptionCardProps> = React.memo(({
               disabled={generating}
               title={t('common.edit')}
               aria-label={t('common.edit')}
-              className="w-7 h-7 grid place-items-center rounded-lg text-gray-400 hover:text-gray-700 dark:hover:text-foreground-primary hover:bg-gray-100 dark:hover:bg-background-hover transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+              className="w-8 h-8 grid place-items-center rounded-lg text-gray-500 hover:text-gray-900 dark:text-foreground-tertiary dark:hover:text-foreground-primary hover:bg-gray-100 dark:hover:bg-background-hover transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
             >
-              <Edit2 size={15} />
+              <Edit2 size={16} />
             </button>
             <button
               type="button"
@@ -201,9 +202,9 @@ export const DescriptionCard: React.FC<DescriptionCardProps> = React.memo(({
               disabled={generating}
               title={t('descriptionCard.regenerate')}
               aria-label={t('descriptionCard.regenerate')}
-              className="w-7 h-7 grid place-items-center rounded-lg text-gray-400 hover:text-gray-700 dark:hover:text-foreground-primary hover:bg-gray-100 dark:hover:bg-background-hover transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+              className="w-8 h-8 grid place-items-center rounded-lg text-gray-500 hover:text-gray-900 dark:text-foreground-tertiary dark:hover:text-foreground-primary hover:bg-gray-100 dark:hover:bg-background-hover transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
             >
-              <RefreshCw size={15} className={generating ? 'animate-spin' : ''} />
+              <RefreshCw size={16} className={generating ? 'animate-spin' : ''} />
             </button>
           </div>
         </div>

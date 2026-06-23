@@ -1,6 +1,6 @@
 import React, { useEffect, useCallback, useState, useRef } from 'react';
 import { useNavigate, useParams, useLocation } from 'react-router-dom';
-import { ArrowLeft, ArrowRight, FileText, Sparkles, Download, Upload, MoreHorizontal, PenLine, Settings2, X, Plus, HelpCircle, ImageIcon } from 'lucide-react';
+import { ArrowLeft, ArrowRight, FileText, Sparkles, Download, Upload, MoreHorizontal, Settings2, X, Plus, HelpCircle, ImageIcon } from 'lucide-react';
 import { useT } from '@/hooks/useT';
 import { MarkdownTextarea, type MarkdownTextareaRef } from '@/components/shared/MarkdownTextarea';
 import PresetCapsules from '@/components/shared/PresetCapsules';
@@ -23,7 +23,7 @@ const detailI18n = {
       title: "编辑页面描述", sectionTitle: "页面描述", pageCount: "共 {{count}} 页", generateImages: "生成图片",
       generating: "生成中...", page: "第 {{num}} 页", titleLabel: "标题",
       description: "描述", batchGenerate: "批量生成描述", export: "导出描述", exportFull: "导出大纲和描述", import: "导入", importExport: "导入/导出",
-      pagesCompleted: "页已完成", noPages: "还没有页面",
+      pagesCompleted: "页已完成", progressLabel: "已完成 {{completed}} / {{total}} 页", noPages: "还没有页面",
       noPagesHint: "请先返回大纲编辑页添加页面", backToOutline: "返回大纲编辑",
       aiPlaceholder: "例如：让描述更详细、删除第2页的某个要点、强调XXX的重要性... · Ctrl+Enter提交",
       aiPlaceholderShort: "例如：让描述更详细... · Ctrl+Enter",
@@ -74,7 +74,7 @@ const detailI18n = {
       title: "Edit Descriptions", sectionTitle: "Page Descriptions", pageCount: "{{count}} pages", generateImages: "Generate Images",
       generating: "Generating...", page: "Page {{num}}", titleLabel: "Title",
       description: "Description", batchGenerate: "Batch Generate Descriptions", export: "Export Descriptions", exportFull: "Export Outline & Descriptions", import: "Import", importExport: "Import/Export",
-      pagesCompleted: "pages completed", noPages: "No pages yet",
+      pagesCompleted: "pages completed", progressLabel: "{{completed}} / {{total}} pages done", noPages: "No pages yet",
       noPagesHint: "Please go back to outline editor to add pages first", backToOutline: "Back to Outline Editor",
       aiPlaceholder: "e.g., Make descriptions more detailed, remove a point from page 2, emphasize XXX... · Ctrl+Enter to submit",
       aiPlaceholderShort: "e.g., Make descriptions more detailed... · Ctrl+Enter",
@@ -200,23 +200,6 @@ const SortableFieldPill: React.FC<{
 };
 
 // 顶栏进度环：直观呈现「已完成 / 总数」，替代纯文字计数
-const ProgressRing: React.FC<{ completed: number; total: number; label: string }> = ({ completed, total, label }) => {
-  const r = 13;
-  const c = 2 * Math.PI * r;
-  const pct = total > 0 ? Math.min(1, Math.max(0, completed / total)) : 0;
-  return (
-    <div className="flex items-center gap-1.5 pr-0.5" title={label}>
-      <svg width="28" height="28" viewBox="0 0 32 32" className="-rotate-90">
-        <circle cx="16" cy="16" r={r} fill="none" stroke="currentColor" strokeWidth="3.5" className="text-gray-200 dark:text-border-primary" />
-        <circle cx="16" cy="16" r={r} fill="none" stroke="currentColor" strokeWidth="3.5" strokeLinecap="round" className="text-banana-500 transition-all duration-500" strokeDasharray={c} strokeDashoffset={c * (1 - pct)} />
-      </svg>
-      <span className="text-[13px] font-bold leading-none text-gray-900 dark:text-foreground-primary">
-        {completed}<span className="text-gray-400 dark:text-foreground-tertiary font-medium">/{total}</span>
-      </span>
-    </div>
-  );
-};
-
 export const DetailEditor: React.FC = () => {
   const navigate = useNavigate();
   const location = useLocation();
@@ -601,7 +584,6 @@ export const DetailEditor: React.FC = () => {
   const missingDescCount = currentProject.pages.filter(p => !p.description_content).length;
   const totalPages = currentProject.pages.length;
   const completedCount = totalPages - missingDescCount;
-  const progressLabel = `${completedCount} / ${totalPages} ${t('detail.pagesCompleted')}`;
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-background-primary flex flex-col">
@@ -627,10 +609,6 @@ export const DetailEditor: React.FC = () => {
               <span className="hidden sm:inline">{t('common.back')}</span>
             </Button>
             <Logo wordmark={t('home.title')} size={28} />
-            <span className="hidden lg:inline-flex items-center gap-1.5 ml-1 px-2.5 h-7 rounded-lg text-[13px] font-medium text-gray-600 dark:text-foreground-secondary bg-gray-100 dark:bg-background-hover">
-              <PenLine size={13} />
-              {t('detail.title')}
-            </span>
           </div>
           
           {/* 中间：AI 修改输入框 */}
@@ -645,15 +623,10 @@ export const DetailEditor: React.FC = () => {
             />
           </div>
 
-          {/* 右侧：进度环 + 操作按钮 */}
+          {/* 右侧：操作按钮 */}
           <div className="flex items-center gap-1.5 md:gap-2 flex-shrink-0">
-            {totalPages > 0 && (
-              <div className="hidden sm:block">
-                <ProgressRing completed={completedCount} total={totalPages} label={progressLabel} />
-              </div>
-            )}
             <Button
-              variant="secondary"
+              variant="ghost"
               size="sm"
               icon={<ArrowLeft size={16} className="md:w-[18px] md:h-[18px]" />}
               onClick={() => navigate(`/project/${projectId}/outline`)}
@@ -722,17 +695,19 @@ export const DetailEditor: React.FC = () => {
         <div className="flex items-center justify-between gap-3">
           {/* 左：区块标题 */}
           <div className="min-w-0">
-            <h2 className="text-[17px] md:text-[19px] font-bold tracking-tight text-gray-900 dark:text-foreground-primary leading-tight truncate">
+            <h2 className="text-base md:text-lg font-semibold tracking-tight text-gray-900 dark:text-foreground-primary leading-tight truncate">
               {t('detail.sectionTitle')}
             </h2>
-            <p className="hidden sm:block text-xs text-gray-500 dark:text-foreground-tertiary mt-0.5">
-              {t('detail.pageCount', { count: totalPages })}
+            <p className="hidden sm:block text-xs text-gray-400 dark:text-foreground-tertiary mt-0.5">
+              {totalPages > 0
+                ? t('detail.progressLabel', { completed: completedCount, total: totalPages })
+                : t('detail.pageCount', { count: totalPages })}
             </p>
           </div>
           {/* 右：操作 */}
           <div className="flex items-center gap-2 flex-shrink-0">
             <Button
-              variant="primary"
+              variant="secondary"
               icon={<Sparkles size={16} className="md:w-[18px] md:h-[18px]" />}
               onClick={handleGenerateAll}
               className="text-sm md:text-base"
