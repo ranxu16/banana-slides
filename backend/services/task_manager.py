@@ -2339,11 +2339,9 @@ def process_template_pdf_split_task(task_id: str, project_id: str,
 
 def analyze_template_task(task_id: str, project_id: str, asset_id: str,
                           ai_service, file_service, app):
-    """ANALYZE_TEMPLATE — Phase C stub. Phase D will replace with real LLM call.
-
-    For now this marks the asset analysis as pending → completed with empty
-    result so the UI flow can be exercised end-to-end. Phase D will fill in
-    the prompt + response handling.
+    """ANALYZE_TEMPLATE — call ai_service.analyze_template, persist 9-field
+    schema (PRD §5.3). Decision 2: AI-declared not_a_slide → analysis_status
+    = 'failed', asset stays manual-only.
     """
     if app is None:
         raise ValueError('Flask app instance must be provided')
@@ -2351,40 +2349,56 @@ def analyze_template_task(task_id: str, project_id: str, asset_id: str,
         task = Task.query.get(task_id)
         if not task:
             return
-        try:
-            _set_task_processing(task_id)
-            task.set_progress({'asset_id': asset_id, 'stage': 'calling_ai'})
-            db.session.commit()
-
-            asset = ProjectTemplateAsset.query.get(asset_id)
-            if not asset:
-                raise ValueError(f'Asset {asset_id} no longer exists')
-
-            # Phase D will replace this stub with the real ai_service.analyze_template
-            asset.analysis_status = 'pending'  # leave as pending; Phase D drives to completed
-            asset.analysis_error = None
-            db.session.commit()
-
-            task.status = 'COMPLETED'
-            task.completed_at = datetime.utcnow()
-            task.set_progress({'asset_id': asset_id, 'stage': 'done'})
-            db.session.commit()
-        except Exception as exc:
-            import traceback
-            logger.error('ANALYZE_TEMPLATE task %s crashed: %s',
-                         task_id, traceback.format_exc())
-            asset = ProjectTemplateAsset.query.get(asset_id)
-            if asset:
-                asset.analysis_status = 'failed'
-                asset.analysis_error = str(exc)
+        with text_resource_limiter.slot(label=f'analyze_template:{asset_id}'):
+            try:
+                _set_task_processing(task_id)
+                task.set_progress({'asset_id': asset_id, 'stage': 'calling_ai'})
                 db.session.commit()
-            task = Task.query.get(task_id)
-            if task:
-                task.status = 'FAILED'
-                task.error_message = str(exc)
+
+                asset = ProjectTemplateAsset.query.get(asset_id)
+                if not asset:
+                    raise ValueError(f'Asset {asset_id} no longer exists')
+
+                image_abs_path = file_service.get_absolute_path(asset.image_path)
+                language = (app.config.get('OUTPUT_LANGUAGE') or 'zh').lower()
+
+                result = ai_service.analyze_template(image_abs_path, language=language)
+
+                asset = ProjectTemplateAsset.query.get(asset_id)
+                if isinstance(result, dict) and result.get('error') == 'not_a_slide':
+                    asset.analysis_status = 'failed'
+                    asset.analysis_error = 'not_a_slide'
+                    asset.analysis_json = None
+                    asset.analysis_notes = None
+                else:
+                    asset.set_analysis(result)
+                    asset.analysis_notes = (result or {}).get('notes')
+                    asset.analysis_status = 'completed'
+                    asset.analysis_error = None
+                _commit_with_retry()
+
+                task = Task.query.get(task_id)
+                task.status = 'COMPLETED'
                 task.completed_at = datetime.utcnow()
-                task.set_progress({'asset_id': asset_id, 'stage': 'failed'})
-                db.session.commit()
+                task.set_progress({'asset_id': asset_id, 'stage': 'done',
+                                   'analysis_status': asset.analysis_status})
+                _commit_with_retry()
+            except Exception as exc:
+                import traceback
+                logger.error('ANALYZE_TEMPLATE task %s crashed: %s',
+                             task_id, traceback.format_exc())
+                asset = ProjectTemplateAsset.query.get(asset_id)
+                if asset:
+                    asset.analysis_status = 'failed'
+                    asset.analysis_error = str(exc)[:500]
+                    db.session.commit()
+                task = Task.query.get(task_id)
+                if task:
+                    task.status = 'FAILED'
+                    task.error_message = str(exc)[:500]
+                    task.completed_at = datetime.utcnow()
+                    task.set_progress({'asset_id': asset_id, 'stage': 'failed'})
+                    db.session.commit()
 
 
 def auto_match_templates_task(task_id: str, project_id: str,
@@ -2392,38 +2406,115 @@ def auto_match_templates_task(task_id: str, project_id: str,
                               overwrite_existing: bool,
                               preserve_non_empty: bool,
                               ai_service, app):
-    """AUTO_MATCH_TEMPLATES — Phase C stub. Phase D will implement real matching."""
+    """AUTO_MATCH_TEMPLATES — calls ai_service.auto_match_templates and
+    writes per-page template_asset_id / style_text / match metadata.
+
+    Decision 5: batching is inside ai_service. Decision 7: writes are
+    bulk-by-page, no project-level fields touched. PRD §8.4: undecided
+    rows null out template_asset_id when overwrite_existing=True.
+    """
     if app is None:
         raise ValueError('Flask app instance must be provided')
     with app.app_context():
         task = Task.query.get(task_id)
         if not task:
             return
-        try:
-            _set_task_processing(task_id)
-            if page_id:
-                pages = Page.query.filter_by(id=page_id, project_id=project_id).all()
-            else:
-                pages = Page.query.filter_by(project_id=project_id).all()
-            total = len(pages)
-            task.set_progress({
-                'total_pages': total,
-                'matched': 0,
-                'undecided': total,
-                'batch_index': 0,
-                'batch_total': 1,
-                'scope': 'page' if page_id else 'project',
-            })
-            task.status = 'COMPLETED'
-            task.completed_at = datetime.utcnow()
-            db.session.commit()
-        except Exception as exc:
-            import traceback
-            logger.error('AUTO_MATCH_TEMPLATES task %s crashed: %s',
-                         task_id, traceback.format_exc())
-            task = Task.query.get(task_id)
-            if task:
-                task.status = 'FAILED'
-                task.error_message = str(exc)
+        with text_resource_limiter.slot(label=f'auto_match:{project_id}'):
+            try:
+                _set_task_processing(task_id)
+                language = (app.config.get('OUTPUT_LANGUAGE') or 'zh').lower()
+
+                if page_id:
+                    page = Page.query.filter_by(
+                        id=page_id, project_id=project_id).first()
+                    if not page:
+                        raise ValueError(f'Page {page_id} not in project {project_id}')
+                    desc = page.get_description_content()
+                    if not desc:
+                        raise ValueError('MISSING_DESCRIPTION')
+                    templates = [t for t in ProjectTemplateAsset.query.filter_by(
+                        project_id=project_id, analysis_status='completed').order_by(
+                        ProjectTemplateAsset.sort_order.asc()).all()]
+                    if not templates:
+                        raise ValueError('NO_ANALYZED_TEMPLATES')
+                    pages_payload = [ai_service._trim_page_for_match(page, desc)]
+                    templates_payload = [ai_service._trim_template_for_match(t)
+                                         for t in templates]
+                    from .prompts import get_template_auto_match_prompt
+                    prompt = get_template_auto_match_prompt(
+                        templates=templates_payload, pages=pages_payload,
+                        language=language)
+                    results = ai_service.generate_json(prompt)
+                    if not isinstance(results, list):
+                        raise ValueError('auto_match: expected list response')
+                else:
+                    results = ai_service.auto_match_templates(
+                        project_id=project_id, language=language,
+                        overwrite_existing=overwrite_existing,
+                        preserve_non_empty=preserve_non_empty)
+
+                matched = 0
+                undecided = 0
+                valid_template_ids = {t.id for t in
+                                       ProjectTemplateAsset.query.filter_by(
+                                           project_id=project_id).all()}
+
+                for row in results:
+                    if not isinstance(row, dict):
+                        continue
+                    pid = row.get('page_id')
+                    if not pid:
+                        continue
+                    page = Page.query.filter_by(
+                        id=pid, project_id=project_id).first()
+                    if not page:
+                        continue
+                    if preserve_non_empty and page.template_asset_id:
+                        continue
+
+                    status = row.get('status', 'undecided')
+                    chosen = row.get('template_asset_id')
+                    if chosen and chosen not in valid_template_ids:
+                        chosen = None
+                        status = 'undecided'
+
+                    if status == 'matched' and chosen:
+                        page.template_asset_id = chosen
+                        page.template_selection_source = 'auto'
+                        page.template_match_reason = (row.get('reason') or '')[:500]
+                        try:
+                            page.template_match_confidence = float(
+                                row.get('confidence') or 0.0)
+                        except (TypeError, ValueError):
+                            page.template_match_confidence = None
+                        matched += 1
+                    else:
+                        if overwrite_existing:
+                            page.template_asset_id = None
+                            page.template_selection_source = None
+                            page.template_match_reason = (row.get('reason') or '')[:500]
+                            page.template_match_confidence = None
+                        undecided += 1
+
+                _commit_with_retry()
+
+                task = Task.query.get(task_id)
+                task.status = 'COMPLETED'
                 task.completed_at = datetime.utcnow()
-                db.session.commit()
+                task.set_progress({
+                    'total_pages': len(results),
+                    'matched': matched,
+                    'undecided': undecided,
+                    'scope': 'page' if page_id else 'project',
+                })
+                _commit_with_retry()
+            except Exception as exc:
+                import traceback
+                logger.error('AUTO_MATCH_TEMPLATES task %s crashed: %s',
+                             task_id, traceback.format_exc())
+                task = Task.query.get(task_id)
+                if task:
+                    task.status = 'FAILED'
+                    task.error_message = str(exc)[:500]
+                    task.completed_at = datetime.utcnow()
+                    db.session.commit()
