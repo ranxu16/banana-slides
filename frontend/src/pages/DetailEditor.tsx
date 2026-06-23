@@ -722,10 +722,10 @@ export const DetailEditor: React.FC = () => {
                 onClick={() => setSettingsOpen(!settingsOpen)}
                 title={t('detail.descSettings')}
                 aria-label={t('detail.descSettings')}
-                className="relative w-10 h-10 grid place-items-center rounded-xl border border-gray-200 dark:border-border-primary bg-white dark:bg-background-secondary text-gray-600 dark:text-foreground-secondary hover:bg-gray-50 dark:hover:bg-background-hover transition-colors"
+                className="relative w-10 h-10 grid place-items-center rounded-xl border border-gray-200 dark:border-border-primary bg-white dark:bg-background-secondary text-gray-600 dark:text-foreground-secondary hover:bg-gray-50 dark:hover:bg-background-hover transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-banana-500 focus-visible:ring-offset-2"
               >
                 <Settings2 size={18} />
-                {descRequirements.trim() && <span className="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-banana-400 ring-2 ring-white dark:ring-background-secondary" />}
+                {!!descRequirements.trim() && <span className="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-banana-400 ring-2 ring-white dark:ring-background-secondary" />}
               </button>
               {settingsOpen && (
                 <div className="absolute top-full left-0 mt-1 z-50 w-80 rounded-xl border border-gray-200 dark:border-border-primary bg-white dark:bg-background-secondary shadow-lg dark:shadow-none p-4 space-y-4">
@@ -892,7 +892,7 @@ export const DetailEditor: React.FC = () => {
                 onClick={() => setFileMenuOpen(!fileMenuOpen)}
                 title={t('detail.importExport')}
                 aria-label={t('detail.importExport')}
-                className="w-10 h-10 grid place-items-center rounded-xl border border-gray-200 dark:border-border-primary bg-white dark:bg-background-secondary text-gray-600 dark:text-foreground-secondary hover:bg-gray-50 dark:hover:bg-background-hover transition-colors"
+                className="w-10 h-10 grid place-items-center rounded-xl border border-gray-200 dark:border-border-primary bg-white dark:bg-background-secondary text-gray-600 dark:text-foreground-secondary hover:bg-gray-50 dark:hover:bg-background-hover transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-banana-500 focus-visible:ring-offset-2"
               >
                 <MoreHorizontal size={18} />
               </button>

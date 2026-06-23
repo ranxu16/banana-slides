@@ -192,7 +192,7 @@ export const DescriptionCard: React.FC<DescriptionCardProps> = React.memo(({
               disabled={generating}
               title={t('common.edit')}
               aria-label={t('common.edit')}
-              className="w-8 h-8 grid place-items-center rounded-lg text-gray-500 hover:text-gray-900 dark:text-foreground-tertiary dark:hover:text-foreground-primary hover:bg-gray-100 dark:hover:bg-background-hover transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+              className="w-8 h-8 grid place-items-center rounded-lg text-gray-500 hover:text-gray-900 dark:text-foreground-tertiary dark:hover:text-foreground-primary hover:bg-gray-100 dark:hover:bg-background-hover transition-colors disabled:opacity-40 disabled:cursor-not-allowed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-banana-500"
             >
               <Edit2 size={16} />
             </button>
@@ -202,7 +202,7 @@ export const DescriptionCard: React.FC<DescriptionCardProps> = React.memo(({
               disabled={generating}
               title={t('descriptionCard.regenerate')}
               aria-label={t('descriptionCard.regenerate')}
-              className="w-8 h-8 grid place-items-center rounded-lg text-gray-500 hover:text-gray-900 dark:text-foreground-tertiary dark:hover:text-foreground-primary hover:bg-gray-100 dark:hover:bg-background-hover transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+              className="w-8 h-8 grid place-items-center rounded-lg text-gray-500 hover:text-gray-900 dark:text-foreground-tertiary dark:hover:text-foreground-primary hover:bg-gray-100 dark:hover:bg-background-hover transition-colors disabled:opacity-40 disabled:cursor-not-allowed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-banana-500"
             >
               <RefreshCw size={16} className={generating ? 'animate-spin' : ''} />
             </button>
