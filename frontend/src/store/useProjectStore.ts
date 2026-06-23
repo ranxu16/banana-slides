@@ -1483,6 +1483,13 @@ const debouncedUpdatePage = debounce(
     return new Promise<Task>((resolve, reject) => {
       let attempts = 0;
       const poll = async () => {
+        // Stop polling if the user navigated to a different project so we
+        // don't keep firing requests for a screen that's no longer visible.
+        const { currentProject } = get();
+        if (!currentProject || currentProject.id !== projectId) {
+          reject(new Error('Project changed, polling stopped'));
+          return;
+        }
         if (attempts++ >= MAX_ATTEMPTS) {
           reject(new Error(t('store.taskFailed')));
           return;

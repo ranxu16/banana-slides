@@ -2479,8 +2479,10 @@ def auto_match_templates_task(task_id: str, project_id: str,
                         templates=templates_payload, pages=pages_payload,
                         language=language)
                     results = ai_service.generate_json(prompt)
+                    if isinstance(results, dict):
+                        results = [results]
                     if not isinstance(results, list):
-                        raise ValueError('auto_match: expected list response')
+                        raise ValueError('auto_match: 期望返回列表')
                 else:
                     results = ai_service.auto_match_templates(
                         project_id=project_id, language=language,
