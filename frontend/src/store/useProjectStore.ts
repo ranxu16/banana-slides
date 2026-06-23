@@ -1361,7 +1361,22 @@ const debouncedUpdatePage = debounce(
   uploadTemplateAsset: async (projectId, file, opts) => {
     const response = await api.uploadTemplateAsset(projectId, file, opts);
     const asset = response.data!.asset;
+    const analyzeTaskId = response.data!.analyze_task_id;
     set((state) => ({ templateAssets: [...state.templateAssets, asset] }));
+    // 后台轮询解析任务，完成/失败后刷新模板库，避免“解析中”徽章一直停留到手动刷新。
+    // 失败也刷新，让 'failed' 状态浮现；用户切走项目后不刷新，避免覆盖新项目的模板库。
+    if (analyzeTaskId) {
+      const refreshIfCurrent = () => {
+        const cur = get().currentProject;
+        if (cur && cur.id === projectId) {
+          get().loadTemplateAssets(projectId).catch(() => {});
+        }
+      };
+      get()
+        .pollTemplateTask(analyzeTaskId, projectId)
+        .then(refreshIfCurrent)
+        .catch(refreshIfCurrent);
+    }
     // 绑定到页面时同步本地 page 字段
     if (opts?.bindToPageId) {
       const { currentProject } = get();
