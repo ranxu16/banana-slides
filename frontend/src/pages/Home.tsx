@@ -83,6 +83,7 @@ const homeI18n = {
         enterContent: '请输入内容',
         filesParsing: '还有 {{count}} 个参考文件正在解析中，请等待解析完成',
         projectCreateFailed: '项目创建失败',
+        multiModeSwitchFailed: '切换到多模板模式失败，请在项目内重试',
         uploadingImage: '正在上传图片并识别内容...',
         imageUploadSuccess: '图片上传成功！已插入到光标位置',
         imageUploadFailed: '图片上传失败',
@@ -163,6 +164,7 @@ const homeI18n = {
         enterContent: 'Please enter content',
         filesParsing: '{{count}} reference file(s) are still parsing, please wait',
         projectCreateFailed: 'Failed to create project',
+        multiModeSwitchFailed: 'Failed to switch to multi-template mode; please retry inside the project',
         uploadingImage: 'Uploading and recognizing image...',
         imageUploadSuccess: 'Image uploaded! Inserted at cursor position',
         imageUploadFailed: 'Failed to upload image',
@@ -647,6 +649,7 @@ export const Home: React.FC = () => {
           await switchTemplateMode(projectId, { mode: 'multi' });
         } catch (error) {
           console.error('Failed to switch to multi-template mode:', error);
+          show({ message: t('home.messages.multiModeSwitchFailed'), type: 'error' });
         }
       }
 

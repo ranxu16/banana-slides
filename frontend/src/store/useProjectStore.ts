@@ -1478,8 +1478,15 @@ const debouncedUpdatePage = debounce(
   // 轮询模板相关任务（解析 / PDF 拆页 / 自动匹配），完成或失败时 resolve。
   // 不污染全局 activeTaskId/taskProgress，便于多任务并发。
   pollTemplateTask: async (taskId, projectId, onProgress) => {
+    // Cap the loop so a stuck/dead worker can't poll forever (~15 min).
+    const MAX_ATTEMPTS = 450;
     return new Promise<Task>((resolve, reject) => {
+      let attempts = 0;
       const poll = async () => {
+        if (attempts++ >= MAX_ATTEMPTS) {
+          reject(new Error(t('store.taskFailed')));
+          return;
+        }
         try {
           const response = await api.getTaskStatus(projectId, taskId);
           const task = response.data;
