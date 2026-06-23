@@ -16,7 +16,7 @@ import time
 from sqlalchemy import func
 from sqlalchemy.exc import OperationalError
 from PIL import Image, ImageDraw, ImageFilter
-from models import db, Task, Page, Material, PageImageVersion, Settings, ProjectTemplateAsset
+from models import db, Task, Page, Material, PageImageVersion, Settings, ProjectTemplateAsset, Project
 from utils import get_filtered_pages
 from utils.image_utils import check_image_resolution
 
@@ -257,6 +257,36 @@ def save_image_with_version(image, project_id: str, page_id: str, file_service,
     logger.debug(f"Page {page_id} image saved as version {next_version}: {image_path}, cached: {cached_image_path}")
 
     return image_path, next_version
+
+
+def resolve_page_template(page, project, file_service):
+    """Per-page-template priority chain (PRD §13).
+
+    Returns (ref_image_abs_path | None, page_style_text | None).
+
+    Priority:
+      1. page.template_asset_id        → asset.image_path (per-page image)
+      2. page.template_style_text      → page-level style text
+      3. project.template_image_path   → legacy project-level image (backfill / single-mode)
+      4. project.template_style        → legacy project-level style
+    """
+    image_path = None
+    style_text = None
+
+    asset = getattr(page, 'template_asset', None)
+    if asset and getattr(asset, 'image_path', None):
+        image_path = file_service.get_absolute_path(asset.image_path)
+
+    if getattr(page, 'template_style_text', None):
+        style_text = page.template_style_text
+
+    if image_path is None and project and getattr(project, 'template_image_path', None):
+        image_path = file_service.get_template_path(project.id)
+
+    if not style_text and project and getattr(project, 'template_style', None):
+        style_text = project.template_style
+
+    return image_path, style_text
 
 
 def _commit_with_retry(max_retries=5, base_delay=0.5):
@@ -643,21 +673,22 @@ def generate_images_task(task_id: str, project_id: str, ai_service, file_service
                                     page_additional_ref_images = image_urls
                                     has_material_images = True
                             
-                            # 在子线程中动态获取模板路径，确保使用最新模板
-                            page_ref_image_path = None
-                            if use_template:
-                                page_ref_image_path = file_service.get_template_path(project_id)
-                                # 注意：如果有风格描述，即使没有模板图片也允许生成
-                                # 这个检查已经在 controller 层完成，这里不再检查
-                            
+                            # Per-page-template (PRD §13): resolve image + style
+                            # per-page, falling back to project-level for legacy/single-mode.
+                            project_for_template = Project.query.get(project_id)
+                            page_ref_image_path, page_style_text = resolve_page_template(
+                                page_obj, project_for_template, file_service)
+                            has_template_image = bool(page_ref_image_path)
+
                             # Generate image prompt
                             prompt = ai_service.generate_image_prompt(
                                 outline, page_data, desc_text, page_index,
                                 has_material_images=has_material_images,
                                 extra_requirements=extra_requirements,
                                 language=language,
-                                has_template=use_template,
-                                aspect_ratio=aspect_ratio
+                                has_template=has_template_image,
+                                aspect_ratio=aspect_ratio,
+                                page_style_text=page_style_text,
                             )
                             logger.debug(f"Generated image prompt for page {page_id}")
                             
@@ -833,25 +864,26 @@ def generate_single_page_image_task(task_id: str, project_id: str, page_id: str,
                     additional_ref_images = image_urls
                     has_material_images = True
             
-            # Get template path if use_template
-            ref_image_path = None
-            if use_template:
-                ref_image_path = file_service.get_template_path(project_id)
-                # 注意：如果有风格描述，即使没有模板图片也允许生成
-                # 这个检查已经在 controller 层完成，这里不再检查
-            
+            # Per-page-template (PRD §13): resolve image + style per-page,
+            # falling back to project-level for legacy/single-mode.
+            project_for_template = Project.query.get(project_id)
+            ref_image_path, page_style_text = resolve_page_template(
+                page, project_for_template, file_service)
+            has_template_image = bool(ref_image_path)
+
             # Generate image prompt
             page_data = page.get_outline_content() or {}
             if page.part:
                 page_data['part'] = page.part
-            
+
             prompt = ai_service.generate_image_prompt(
                 outline, page_data, desc_text, page.order_index + 1,
                 has_material_images=has_material_images,
                 extra_requirements=extra_requirements,
                 language=language,
-                has_template=use_template,
-                aspect_ratio=aspect_ratio
+                has_template=has_template_image,
+                aspect_ratio=aspect_ratio,
+                page_style_text=page_style_text,
             )
 
             def mark_generating():

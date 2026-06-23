@@ -819,8 +819,13 @@ def get_image_generation_prompt(page_desc: str, outline_text: str,
                                 language: str = None,
                                 has_template: bool = True,
                                 page_index: int = 1,
-                                aspect_ratio: str = "16:9") -> str:
-    """生成图片生成 prompt"""
+                                aspect_ratio: str = "16:9",
+                                page_style_text: str = None) -> str:
+    """生成图片生成 prompt
+
+    has_template: 是否有模板**图片**(用作 ref_image)。控制 "和模板图片严格相似" 措辞。
+    page_style_text: 页级文字风格(per-page-template 决策 7)。非空时拼入显式风格段。
+    """
     material_images_note = ""
     if has_material_images:
         material_images_note = (
@@ -836,12 +841,22 @@ def get_image_generation_prompt(page_desc: str, outline_text: str,
     template_style_guideline = "- 配色和设计语言和模板图片严格相似。" if has_template else "- 严格按照风格描述进行设计。"
     forbidden_template_text_guidline = "- 只参考风格设计，禁止出现模板中的文字。\n" if has_template else ""
 
+    page_style_block = ""
+    if page_style_text and page_style_text.strip():
+        page_style_block = (
+            "\n\n<page_style>\n"
+            f"{page_style_text.strip()}\n"
+            "</page_style>\n"
+            "- 必须遵循上述 page_style 中的视觉风格、配色、版式语言。"
+        )
+
     prompt = (f"""\
 你是一位专家级UI UX演示设计师，专注于生成设计良好的PPT页面。
 当前PPT页面的页面描述如下:
 <page_description>
 {page_desc}
 </page_description>
+{page_style_block}
 
 <design_guidelines>
 - 要求文字清晰锐利, 画面为4K分辨率，{aspect_ratio}比例。

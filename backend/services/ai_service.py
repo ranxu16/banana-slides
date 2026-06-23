@@ -832,36 +832,24 @@ class AIService:
                             extra_requirements: Optional[str] = None,
                             language='zh',
                             has_template: bool = True,
-                            aspect_ratio: str = "16:9") -> str:
+                            aspect_ratio: str = "16:9",
+                            page_style_text: Optional[str] = None) -> str:
         """
         Generate image generation prompt for a page
-        Based on demo.py gen_prompts()
-        
+
         Args:
-            outline: Complete outline
-            page: Page outline data
-            page_desc: Page description text
-            page_index: Page number (1-indexed)
-            has_material_images: 是否有素材图片（从项目描述中提取的图片）
-            extra_requirements: Optional extra requirements to apply to all pages
-            language: Output language
-            has_template: 是否有模板图片（False表示无模板图模式）
-        
-        Returns:
-            Image generation prompt
+            has_template: 是否有模板图片(False=无模板图模式)
+            page_style_text: 页级文字风格(per-page-template 决策 7);
+                非空时拼入风格段,优先级高于项目级 template_style
         """
         outline_text = self.generate_outline_text(outline)
-        
-        # Determine current section
         if 'part' in page:
             current_section = page['part']
         else:
             current_section = f"{page.get('title', 'Untitled')}"
-        
-        # 在传给文生图模型之前，移除 Markdown 图片链接
-        # 图片本身已经通过 additional_ref_images 传递，只保留文字描述
+
         cleaned_page_desc = self.remove_markdown_images(page_desc)
-        
+
         prompt = get_image_generation_prompt(
             page_desc=cleaned_page_desc,
             outline_text=outline_text,
@@ -871,9 +859,10 @@ class AIService:
             language=language,
             has_template=has_template,
             page_index=page_index,
-            aspect_ratio=aspect_ratio
+            aspect_ratio=aspect_ratio,
+            page_style_text=page_style_text,
         )
-        
+
         return prompt
     
     def generate_image(self, prompt: str, ref_image_path: Optional[str] = None, 
