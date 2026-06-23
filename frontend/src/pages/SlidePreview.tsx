@@ -276,6 +276,7 @@ import {
   Loader2,
   Info,
   Layers,
+  LayoutTemplate,
 } from 'lucide-react';
 import { Button, Loading, Modal, Textarea, useToast, useConfirm, MaterialSelector, ProjectSettingsModal, ExportTasksPanel, TextStyleSelector } from '@/components/shared';
 import { SwitchToSingleModeDialog } from '@/components/template/SwitchToSingleModeDialog';
@@ -1635,7 +1636,7 @@ export const SlidePreview: React.FC = () => {
                 <Button
                   variant="ghost"
                   size="sm"
-                  icon={<Layers size={16} className="md:w-[18px] md:h-[18px]" />}
+                  icon={<LayoutTemplate size={16} className="md:w-[18px] md:h-[18px]" />}
                   onClick={() => navigate(`/project/${projectId}/template-setup`)}
                   className="hidden lg:inline-flex"
                 >

@@ -11,11 +11,13 @@ import {
   ChevronDown,
   ChevronUp,
   Layers,
+  LayoutTemplate,
+  PenLine,
 } from 'lucide-react';
 import { useT } from '@/hooks/useT';
 import { cn } from '@/utils';
 import { getImageUrl } from '@/api/client';
-import { Button, Loading, useToast, useConfirm } from '@/components/shared';
+import { Button, IconButton, Loading, useToast, useConfirm } from '@/components/shared';
 import { useProjectStore } from '@/store/useProjectStore';
 import { TemplatePickerModal } from '@/components/template/TemplatePickerModal';
 import { TemplateAnalysisEditor } from '@/components/template/TemplateAnalysisEditor';
@@ -315,15 +317,13 @@ export const TemplateSetupPage: React.FC = () => {
             <span className="text-sm md:text-lg font-semibold hidden lg:inline">{t('ts.title')}</span>
           </div>
 
-          <div className="flex items-center gap-1.5 md:gap-2 flex-shrink-0">
-            <Button
-              variant="secondary"
-              size="sm"
+          <div className="flex items-center gap-1 md:gap-2 flex-shrink-0">
+            <IconButton
               icon={<Layers size={16} />}
+              label={t('ts.toSingle')}
+              tooltipSide="bottom"
               onClick={() => setSwitchOpen(true)}
-            >
-              <span className="hidden sm:inline">{t('ts.toSingle')}</span>
-            </Button>
+            />
             <Button
               variant="secondary"
               size="sm"
@@ -424,7 +424,7 @@ export const TemplateSetupPage: React.FC = () => {
                         <div className="flex min-w-0 flex-1 flex-col gap-1.5">
                           <div className="flex items-center gap-2">
                             <input
-                              className="min-w-0 flex-1 rounded-md border border-gray-200 bg-white px-2 py-1 text-xs text-gray-800 outline-none focus:border-banana-500 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100"
+                              className="min-w-0 flex-1 rounded-md border border-transparent bg-transparent px-2 py-1 text-xs font-medium text-gray-800 outline-none transition-colors hover:border-gray-200 hover:bg-white focus:border-banana-500 focus:bg-white dark:text-gray-100 dark:hover:border-gray-700 dark:hover:bg-gray-800 dark:focus:bg-gray-800"
                               placeholder={t('ts.labelPlaceholder')}
                               defaultValue={asset.user_label || ''}
                               onBlur={(e) => {
@@ -443,31 +443,28 @@ export const TemplateSetupPage: React.FC = () => {
                               {t(`ts.status${asset.analysis_status.charAt(0).toUpperCase()}${asset.analysis_status.slice(1)}`)}
                             </span>
                           </div>
-                          <div className="mt-auto flex items-center gap-2">
-                            <button
-                              type="button"
+                          <div className="mt-auto flex items-center gap-0.5">
+                            <IconButton
+                              size="sm"
+                              icon={expanded ? <ChevronUp size={15} /> : <ChevronDown size={15} />}
+                              label={expanded ? t('ts.collapse') : t('ts.expand')}
+                              active={expanded}
                               onClick={() => setExpandedAssetId(expanded ? null : asset.id)}
-                              className="flex items-center gap-1 text-xs text-banana-600 hover:text-banana-700"
-                            >
-                              {expanded ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
-                              {expanded ? t('ts.collapse') : t('ts.expand')}
-                            </button>
-                            <button
-                              type="button"
+                            />
+                            <IconButton
+                              size="sm"
+                              icon={<RefreshCw size={14} />}
+                              label={t('ts.reanalyze')}
                               onClick={() => handleReanalyze(asset.id)}
-                              className="flex items-center gap-1 text-xs text-gray-500 hover:text-banana-600"
-                            >
-                              <RefreshCw size={12} />
-                              {t('ts.reanalyze')}
-                            </button>
-                            <button
-                              type="button"
+                            />
+                            <IconButton
+                              size="sm"
+                              variant="danger"
+                              icon={<Trash2 size={14} />}
+                              label={t('ts.delete')}
+                              className="ml-auto"
                               onClick={() => handleDeleteAsset(asset.id)}
-                              className="ml-auto flex items-center gap-1 text-xs text-red-500 hover:text-red-600"
-                            >
-                              <Trash2 size={12} />
-                              {t('ts.delete')}
-                            </button>
+                            />
                           </div>
                         </div>
                       </div>
@@ -537,49 +534,48 @@ export const TemplateSetupPage: React.FC = () => {
                             {t('ts.currentStyle')}: {page.template_style_text}
                           </p>
                         )}
-                        <div className="mt-1.5 flex flex-wrap items-center gap-2">
-                          <button
-                            type="button"
-                            onClick={() => setPickerPageId(pageId)}
-                            className="text-xs text-banana-600 hover:text-banana-700"
-                          >
-                            {t('ts.pickTemplate')}
-                          </button>
-                          <button
-                            type="button"
-                            disabled={!hasDesc}
-                            title={!hasDesc ? t('ts.noDescHint') : undefined}
-                            onClick={() => handleAutoMatchPage(pageId)}
-                            className="text-xs text-gray-500 hover:text-banana-600 disabled:cursor-not-allowed disabled:opacity-40"
-                          >
-                            {t('ts.autoMatchPage')}
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setStyleDraftPageId(editingStyle ? null : pageId);
-                              setStyleDraft(page.template_style_text || '');
-                            }}
-                            className="text-xs text-gray-500 hover:text-banana-600"
-                          >
-                            {t('ts.editStyle')}
-                          </button>
-                        </div>
-                        {editingStyle && (
-                          <div className="mt-2 flex items-start gap-2">
-                            <textarea
-                              className="min-h-[44px] flex-1 resize-y rounded-lg border border-gray-200 bg-white px-2 py-1.5 text-xs text-gray-800 outline-none focus:border-banana-500 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100"
-                              placeholder={t('ts.stylePlaceholder')}
-                              value={styleDraft}
-                              onChange={(e) => setStyleDraft(e.target.value)}
-                            />
-                            <Button variant="primary" size="sm" onClick={() => handleSaveStyle(pageId)}>
-                              {t('ts.saveStyle')}
-                            </Button>
-                          </div>
-                        )}
+                      </div>
+                      <div className="flex shrink-0 items-center gap-0.5">
+                        <IconButton
+                          size="sm"
+                          variant="primary"
+                          icon={<LayoutTemplate size={15} />}
+                          label={t('ts.pickTemplate')}
+                          onClick={() => setPickerPageId(pageId)}
+                        />
+                        <IconButton
+                          size="sm"
+                          icon={<Sparkles size={15} />}
+                          label={hasDesc ? t('ts.autoMatchPage') : t('ts.noDescHint')}
+                          disabled={!hasDesc}
+                          onClick={() => handleAutoMatchPage(pageId)}
+                        />
+                        <IconButton
+                          size="sm"
+                          icon={<PenLine size={15} />}
+                          label={t('ts.editStyle')}
+                          active={editingStyle}
+                          onClick={() => {
+                            setStyleDraftPageId(editingStyle ? null : pageId);
+                            setStyleDraft(page.template_style_text || '');
+                          }}
+                        />
                       </div>
                     </div>
+                    {editingStyle && (
+                      <div className="mt-3 flex items-start gap-2">
+                        <textarea
+                          className="min-h-[44px] flex-1 resize-y rounded-lg border border-gray-200 bg-white px-2 py-1.5 text-xs text-gray-800 outline-none focus:border-banana-500 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100"
+                          placeholder={t('ts.stylePlaceholder')}
+                          value={styleDraft}
+                          onChange={(e) => setStyleDraft(e.target.value)}
+                          autoFocus
+                        />
+                        <Button variant="primary" size="sm" onClick={() => handleSaveStyle(pageId)}>
+                          {t('ts.saveStyle')}
+                        </Button>
+                      </div>
+                    )}
                   </div>
                 );
               })}

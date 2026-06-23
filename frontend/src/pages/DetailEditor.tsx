@@ -1,6 +1,6 @@
 import React, { useEffect, useCallback, useState, useRef } from 'react';
 import { useNavigate, useParams, useLocation } from 'react-router-dom';
-import { ArrowLeft, ArrowRight, FileText, Sparkles, Download, Upload, ChevronDown, Settings2, X, Plus, HelpCircle, ImageIcon, Layers } from 'lucide-react';
+import { ArrowLeft, ArrowRight, FileText, Sparkles, Download, Upload, ChevronDown, Settings2, X, Plus, HelpCircle, ImageIcon, Layers, LayoutTemplate } from 'lucide-react';
 import { useT } from '@/hooks/useT';
 import { MarkdownTextarea, type MarkdownTextareaRef } from '@/components/shared/MarkdownTextarea';
 import PresetCapsules from '@/components/shared/PresetCapsules';
@@ -654,7 +654,7 @@ export const DetailEditor: React.FC = () => {
               <Button
                 variant="ghost"
                 size="sm"
-                icon={<Layers size={16} className="md:w-[18px] md:h-[18px]" />}
+                icon={<LayoutTemplate size={16} className="md:w-[18px] md:h-[18px]" />}
                 onClick={() => navigate(`/project/${projectId}/template-setup`)}
                 disabled={isRenovationProcessing}
                 className="hidden md:inline-flex"
