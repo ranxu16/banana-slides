@@ -779,7 +779,6 @@ def generate_images_task(task_id: str, project_id: str, ai_service, file_service
                 logger.info(f"Task {task_id} COMPLETED - {completed} images generated, {failed} failed")
             
             # Update project status
-            from models import Project
             project = Project.query.get(project_id)
             if project and failed == 0:
                 project.status = 'COMPLETED'
