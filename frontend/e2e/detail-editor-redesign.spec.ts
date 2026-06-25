@@ -78,8 +78,11 @@ test.describe('DetailEditor redesign', () => {
       page.getByRole('heading', { name: /页面描述|Page Descriptions/ })
     ).toBeVisible()
 
-    // Progress shown as plain text — 2 of 3 pages completed
-    await expect(page.getByText(/2 \/ 3/)).toBeVisible()
+    // Progress shown as an editorial fraction — 2 of 3 pages completed.
+    // Numbers are split across spans, so assert via the accessible label.
+    await expect(page.getByLabel(/2 \/ 3/)).toBeVisible()
+    // Zero-padded completed count is the banana focal numeral
+    await expect(page.getByText('02', { exact: true }).first()).toBeVisible()
   })
 
   test('settings icon button toggles the requirements popover', async ({ page }) => {
@@ -109,10 +112,11 @@ test.describe('DetailEditor redesign', () => {
   test('cards show page-number badges and always-visible icon actions', async ({ page }) => {
     await gotoDetail(page)
 
-    // Zero-padded page-number badges
+    // Zero-padded page-number badges. '01' is unique to a card badge; '02'/'03'
+    // also appear in the toolbar progress fraction, so assert the first match.
     await expect(page.getByText('01', { exact: true })).toBeVisible()
-    await expect(page.getByText('02', { exact: true })).toBeVisible()
-    await expect(page.getByText('03', { exact: true })).toBeVisible()
+    await expect(page.getByText('02', { exact: true }).first()).toBeVisible()
+    await expect(page.getByText('03', { exact: true }).first()).toBeVisible()
 
     // Edit + regenerate are always-visible icon buttons (no hover needed) — mobile-friendly
     const editButtons = page.getByRole('button', { name: /^编辑$|^Edit$/ })

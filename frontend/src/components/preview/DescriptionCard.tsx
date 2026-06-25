@@ -162,7 +162,10 @@ export const DescriptionCard: React.FC<DescriptionCardProps> = React.memo(({
 
   return (
     <>
-      <Card className="p-0 overflow-hidden flex flex-col transition-shadow duration-200 hover:shadow-md">
+      <Card
+        className="p-0 overflow-hidden flex flex-col transition-all duration-200 hover:shadow-lg hover:-translate-y-0.5 hover:border-banana-200 dark:hover:border-border-hover motion-safe:animate-slide-in-up"
+        style={{ animationDelay: `${Math.min(index, 8) * 60}ms` }}
+      >
         {/* 标题栏 */}
         <div className="flex items-center justify-between gap-2 px-4 py-3 border-b border-gray-100 dark:border-border-primary">
           <div className="flex items-center gap-2.5 min-w-0">

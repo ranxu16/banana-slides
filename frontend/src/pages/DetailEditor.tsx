@@ -586,7 +586,7 @@ export const DetailEditor: React.FC = () => {
   const completedCount = totalPages - missingDescCount;
 
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-background-primary flex flex-col">
+    <div className="min-h-screen flex flex-col bg-gray-50 dark:bg-background-primary bg-[radial-gradient(110%_45%_at_50%_4%,rgba(255,205,20,0.20),transparent_55%)] dark:bg-[radial-gradient(110%_45%_at_50%_4%,rgba(255,202,0,0.09),transparent_50%)]">
       {/* 顶栏 */}
       <header className="bg-white dark:bg-background-secondary shadow-sm dark:shadow-background-primary/30 border-b border-gray-200 dark:border-border-primary px-3 md:px-6 py-2 md:py-3 flex-shrink-0">
         <div className="flex items-center justify-between gap-2 md:gap-4">
@@ -663,7 +663,7 @@ export const DetailEditor: React.FC = () => {
       </header>
 
       {/* 操作栏 */}
-      <div className="bg-white dark:bg-background-secondary border-b border-gray-200 dark:border-border-primary px-3 md:px-6 py-3 md:py-4 flex-shrink-0">
+      <div className="border-b border-gray-200/70 dark:border-border-primary/70 px-3 md:px-6 py-3 md:py-5 flex-shrink-0">
         {isRenovationProcessing ? (
           <div className="max-w-xl mx-auto">
             <div className="flex items-center justify-between mb-1.5">
@@ -693,16 +693,21 @@ export const DetailEditor: React.FC = () => {
           </div>
         ) : (
         <div className="flex items-center justify-between gap-3">
-          {/* 左：区块标题 */}
-          <div className="min-w-0">
-            <h2 className="text-base md:text-lg font-semibold tracking-tight text-gray-900 dark:text-foreground-primary leading-tight truncate">
+          {/* 左：区块标题 + 进度分数 */}
+          <div className="flex items-end gap-3 md:gap-4 min-w-0">
+            <h2 className="text-xl md:text-2xl font-extrabold tracking-tight text-gray-900 dark:text-foreground-primary leading-none truncate">
               {t('detail.sectionTitle')}
             </h2>
-            <p className="hidden sm:block text-xs text-gray-400 dark:text-foreground-tertiary mt-0.5">
-              {totalPages > 0
-                ? t('detail.progressLabel', { completed: completedCount, total: totalPages })
-                : t('detail.pageCount', { count: totalPages })}
-            </p>
+            {totalPages > 0 && (
+              <span
+                className="shrink-0 flex items-baseline font-bold tabular-nums tracking-tight leading-none"
+                aria-label={t('detail.progressLabel', { completed: completedCount, total: totalPages })}
+              >
+                <span className="text-2xl md:text-3xl text-banana-500">{String(completedCount).padStart(2, '0')}</span>
+                <span className="mx-0.5 text-lg md:text-xl text-gray-300 dark:text-foreground-tertiary">⁄</span>
+                <span className="text-lg md:text-xl text-gray-400 dark:text-foreground-tertiary">{String(totalPages).padStart(2, '0')}</span>
+              </span>
+            )}
           </div>
           {/* 右：操作 */}
           <div className="flex items-center gap-2 flex-shrink-0">
