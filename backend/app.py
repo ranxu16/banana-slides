@@ -29,6 +29,37 @@ from controllers.openai_oauth_controller import openai_oauth_bp
 from controllers import project_bp, page_bp, template_bp, user_template_bp, user_style_template_bp, export_bp, file_bp, style_bp
 
 
+def _is_meaningful_setting(value):
+    """Return True when a setting contains a real value rather than a placeholder."""
+    if value is None:
+        return False
+    if isinstance(value, str):
+        cleaned = value.strip()
+        if not cleaned:
+            return False
+        lowered = cleaned.lower()
+        if lowered in {"none", "null", ""}:
+            return False
+        if lowered.startswith("your-") or lowered.startswith("dummy") or lowered.startswith("placeholder"):
+            return False
+        if lowered.startswith("changeme") or lowered.startswith("replace-me") or lowered.startswith("replace_me"):
+            return False
+        if "your-api-key-here" in lowered or "your-anthropic-api-key-here" in lowered:
+            return False
+        return True
+    return bool(value)
+
+
+def _resolve_setting_value(env_key, db_value, fallback_value):
+    """Prefer meaningful environment variables over database values and config defaults."""
+    env_value = os.getenv(env_key, "")
+    if _is_meaningful_setting(env_value):
+        return env_value
+    if _is_meaningful_setting(db_value):
+        return db_value
+    return fallback_value
+
+
 # Enable SQLite WAL mode for all connections
 @event.listens_for(Engine, "connect")
 def set_sqlite_pragma(dbapi_conn, connection_record):
@@ -219,23 +250,39 @@ def _load_settings_to_config(app):
         # Load API configuration
         # Note: We load even if value is None/empty to allow clearing settings
         # But we only log if there's an actual value
-        if settings.api_base_url is not None:
-            # 将数据库中的统一 API Base 同步到 Google/OpenAI 两个配置，确保覆盖环境变量
-            app.config['GOOGLE_API_BASE'] = settings.api_base_url
-            app.config['OPENAI_API_BASE'] = settings.api_base_url
-            if settings.api_base_url:
-                logging.info(f"Loaded API_BASE from settings: {settings.api_base_url}")
-            else:
-                logging.info("API_BASE is empty in settings, using env var or default")
+        google_api_base = _resolve_setting_value(
+            'GOOGLE_API_BASE',
+            settings.api_base_url,
+            app.config.get('GOOGLE_API_BASE') or Config.GOOGLE_API_BASE,
+        )
+        openai_api_base = _resolve_setting_value(
+            'OPENAI_API_BASE',
+            settings.api_base_url,
+            google_api_base or app.config.get('OPENAI_API_BASE') or Config.OPENAI_API_BASE,
+        )
+        app.config['GOOGLE_API_BASE'] = google_api_base
+        app.config['OPENAI_API_BASE'] = openai_api_base
+        if _is_meaningful_setting(settings.api_base_url):
+            logging.info("Loaded API_BASE from settings")
+        elif _is_meaningful_setting(google_api_base):
+            logging.info("Loaded API_BASE from environment")
 
-        if settings.api_key is not None:
-            # 同步到两个提供商的 key，数据库优先于环境变量
-            app.config['GOOGLE_API_KEY'] = settings.api_key
-            app.config['OPENAI_API_KEY'] = settings.api_key
-            if settings.api_key:
-                logging.info("Loaded API key from settings")
-            else:
-                logging.info("API key is empty in settings, using env var or default")
+        google_api_key = _resolve_setting_value(
+            'GOOGLE_API_KEY',
+            settings.api_key,
+            app.config.get('GOOGLE_API_KEY') or Config.GOOGLE_API_KEY,
+        )
+        openai_api_key = _resolve_setting_value(
+            'OPENAI_API_KEY',
+            settings.api_key,
+            google_api_key or app.config.get('OPENAI_API_KEY') or Config.OPENAI_API_KEY,
+        )
+        app.config['GOOGLE_API_KEY'] = google_api_key
+        app.config['OPENAI_API_KEY'] = openai_api_key
+        if _is_meaningful_setting(settings.api_key):
+            logging.info("Loaded API key from settings")
+        elif _is_meaningful_setting(google_api_key):
+            logging.info("Loaded API key from environment")
 
         # Load image generation settings (fall back to .env/Config when NULL)
         resolution = settings.image_resolution or Config.DEFAULT_RESOLUTION

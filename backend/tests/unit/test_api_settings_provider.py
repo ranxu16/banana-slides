@@ -9,6 +9,8 @@ import pytest
 import requests
 from flask import Flask
 
+import app as app_module
+from config import Config
 from controllers import settings_controller
 from controllers.settings_controller import update_settings, verify_api_key
 
@@ -19,6 +21,24 @@ def _build_settings(**overrides):
         'api_key': None,
         'api_base_url': None,
         'text_model': None,
+        'image_model': None,
+        'image_caption_model': None,
+        'image_resolution': None,
+        'image_aspect_ratio': None,
+        'max_description_workers': None,
+        'max_image_workers': None,
+        'mineru_api_base': None,
+        'mineru_token': None,
+        'output_language': None,
+        'enable_text_reasoning': False,
+        'text_thinking_budget': None,
+        'enable_image_reasoning': False,
+        'image_thinking_budget': None,
+        'baidu_api_key': None,
+        'text_model_source': None,
+        'image_model_source': None,
+        'image_caption_model_source': None,
+        'lazyllm_api_keys': None,
     }
     defaults.update(overrides)
 
@@ -28,6 +48,31 @@ def _build_settings(**overrides):
         'api_key_length': len(settings.api_key) if settings.api_key else 0,
     }
     return settings
+
+
+def test_load_settings_prefers_env_api_key_over_database(monkeypatch):
+    """Environment API credentials should take precedence over stale database values."""
+    monkeypatch.setenv('GOOGLE_API_KEY', 'env-google-key')
+    monkeypatch.setenv('OPENAI_API_KEY', 'env-openai-key')
+    monkeypatch.setenv('GOOGLE_API_BASE', 'https://env.google.example')
+    monkeypatch.setenv('OPENAI_API_BASE', 'https://env.openai.example')
+
+    settings = _build_settings(
+        api_key='db-placeholder-key',
+        api_base_url='https://db.example',
+    )
+
+    app = Flask(__name__)
+    app.config.from_object(Config)
+
+    with patch('models.Settings.get_settings', return_value=settings):
+        with patch('services.task_manager.sync_resource_limits'):
+            app_module._load_settings_to_config(app)
+
+    assert app.config['GOOGLE_API_KEY'] == 'env-google-key'
+    assert app.config['OPENAI_API_KEY'] == 'env-openai-key'
+    assert app.config['GOOGLE_API_BASE'] == 'https://env.google.example'
+    assert app.config['OPENAI_API_BASE'] == 'https://env.openai.example'
 
 
 def test_update_settings_accepts_lazyllm_provider():

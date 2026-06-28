@@ -25,6 +25,38 @@ from services.update_check_service import check_for_update
 logger = logging.getLogger(__name__)
 ALLOWED_PROVIDER_FORMATS = {"openai", "gemini", "lazyllm", "codex"} | LAZYLLM_VENDORS
 
+
+def _is_meaningful_setting(value):
+    """Return True when a setting contains a real value rather than a placeholder."""
+    if value is None:
+        return False
+    if isinstance(value, str):
+        cleaned = value.strip()
+        if not cleaned:
+            return False
+        lowered = cleaned.lower()
+        if lowered in {"none", "null", ""}:
+            return False
+        if lowered.startswith("your-") or lowered.startswith("dummy") or lowered.startswith("placeholder"):
+            return False
+        if lowered.startswith("changeme") or lowered.startswith("replace-me") or lowered.startswith("replace_me"):
+            return False
+        if "your-api-key-here" in lowered or "your-anthropic-api-key-here" in lowered:
+            return False
+        return True
+    return bool(value)
+
+
+def _resolve_setting_value(env_key, db_value, fallback_value):
+    """Prefer meaningful environment variables over database values and config defaults."""
+    env_value = os.getenv(env_key, "")
+    if _is_meaningful_setting(env_value):
+        return env_value
+    if _is_meaningful_setting(db_value):
+        return db_value
+    return fallback_value
+
+
 settings_bp = Blueprint(
     "settings", __name__, url_prefix="/api/settings"
 )
@@ -645,41 +677,40 @@ def _sync_settings_to_config(settings: Settings):
         logger.info(f"AI provider format changed: {old_format} -> {new_format}")
     current_app.config["AI_PROVIDER_FORMAT"] = new_format
     
-    # Sync API configuration (sync to both GOOGLE_* and OPENAI_* to ensure DB settings override env vars)
-    if settings.api_base_url is not None:
-        old_base = current_app.config.get("GOOGLE_API_BASE")
-        if old_base != settings.api_base_url:
-            ai_config_changed = True
-            logger.info(f"API base URL changed: {old_base} -> {settings.api_base_url}")
-        current_app.config["GOOGLE_API_BASE"] = settings.api_base_url
-        current_app.config["OPENAI_API_BASE"] = settings.api_base_url
-    else:
-        # Restore .env defaults (pop would permanently lose .env values)
-        env_base_google = Config.GOOGLE_API_BASE
-        env_base_openai = Config.OPENAI_API_BASE
-        if current_app.config.get("GOOGLE_API_BASE") != env_base_google or current_app.config.get("OPENAI_API_BASE") != env_base_openai:
-            ai_config_changed = True
-            logger.info("API base URL cleared, falling back to .env defaults")
-        current_app.config["GOOGLE_API_BASE"] = env_base_google
-        current_app.config["OPENAI_API_BASE"] = env_base_openai
+    # Sync API configuration while preferring meaningful environment variables over database values.
+    google_api_base = _resolve_setting_value(
+        "GOOGLE_API_BASE",
+        settings.api_base_url,
+        current_app.config.get("GOOGLE_API_BASE") or Config.GOOGLE_API_BASE,
+    )
+    openai_api_base = _resolve_setting_value(
+        "OPENAI_API_BASE",
+        settings.api_base_url,
+        google_api_base or current_app.config.get("OPENAI_API_BASE") or Config.OPENAI_API_BASE,
+    )
+    old_base = current_app.config.get("GOOGLE_API_BASE")
+    if old_base != google_api_base:
+        ai_config_changed = True
+        logger.info("API base URL changed")
+    current_app.config["GOOGLE_API_BASE"] = google_api_base
+    current_app.config["OPENAI_API_BASE"] = openai_api_base
 
-    if settings.api_key is not None:
-        old_key = current_app.config.get("GOOGLE_API_KEY")
-        # Compare actual values to detect any change (but don't log the keys for security)
-        if old_key != settings.api_key:
-            ai_config_changed = True
-            logger.info("API key updated")
-        current_app.config["GOOGLE_API_KEY"] = settings.api_key
-        current_app.config["OPENAI_API_KEY"] = settings.api_key
-    else:
-        # Restore .env defaults (pop would permanently lose .env values)
-        env_key_google = Config.GOOGLE_API_KEY
-        env_key_openai = Config.OPENAI_API_KEY
-        if current_app.config.get("GOOGLE_API_KEY") != env_key_google or current_app.config.get("OPENAI_API_KEY") != env_key_openai:
-            ai_config_changed = True
-            logger.info("API key cleared, falling back to .env defaults")
-        current_app.config["GOOGLE_API_KEY"] = env_key_google
-        current_app.config["OPENAI_API_KEY"] = env_key_openai
+    google_api_key = _resolve_setting_value(
+        "GOOGLE_API_KEY",
+        settings.api_key,
+        current_app.config.get("GOOGLE_API_KEY") or Config.GOOGLE_API_KEY,
+    )
+    openai_api_key = _resolve_setting_value(
+        "OPENAI_API_KEY",
+        settings.api_key,
+        google_api_key or current_app.config.get("OPENAI_API_KEY") or Config.OPENAI_API_KEY,
+    )
+    old_key = current_app.config.get("GOOGLE_API_KEY")
+    if old_key != google_api_key:
+        ai_config_changed = True
+        logger.info("API key updated")
+    current_app.config["GOOGLE_API_KEY"] = google_api_key
+    current_app.config["OPENAI_API_KEY"] = openai_api_key
     
     # Check model changes
     new_text_model = settings.text_model or Config.TEXT_MODEL
