@@ -469,10 +469,15 @@ def export_editable_pptx(project_id):
             True if project.enable_icon_subject_extraction is None
             else bool(project.enable_icon_subject_extraction)
         )
+        enable_visual_structure_analysis = (
+            False if project.enable_visual_structure_analysis is None
+            else bool(project.enable_visual_structure_analysis)
+        )
         logger.info(
             f"Export settings: extractor={export_extractor_method}, "
             f"inpaint={export_inpaint_method}, "
-            f"icon_subject_extraction={enable_icon_subject_extraction}"
+            f"icon_subject_extraction={enable_icon_subject_extraction}, "
+            f"visual_structure_analysis={enable_visual_structure_analysis}"
         )
 
         # 使用递归分析任务（不需要 ai_service，使用 ImageEditabilityService）
@@ -488,6 +493,7 @@ def export_editable_pptx(project_id):
             export_extractor_method=export_extractor_method,
             export_inpaint_method=export_inpaint_method,
             enable_icon_subject_extraction=enable_icon_subject_extraction,
+            enable_visual_structure_analysis=enable_visual_structure_analysis,
             app=app
         )
         

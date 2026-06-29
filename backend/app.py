@@ -318,10 +318,15 @@ def _load_settings_to_config(app):
             app.config['MINERU_TOKEN'] = settings.mineru_token
             logging.info("Loaded MINERU_TOKEN from settings")
         
-        # Load image caption model
-        if settings.image_caption_model:
-            app.config['IMAGE_CAPTION_MODEL'] = settings.image_caption_model
-            logging.info(f"Loaded IMAGE_CAPTION_MODEL from settings: {settings.image_caption_model}")
+        # Load image caption model - fall back to text_model when not explicitly configured,
+        # so the caption provider uses a model compatible with the configured text provider.
+        caption_model = settings.image_caption_model or settings.text_model
+        if caption_model:
+            app.config['IMAGE_CAPTION_MODEL'] = caption_model
+            if settings.image_caption_model:
+                logging.info(f"Loaded IMAGE_CAPTION_MODEL from settings: {caption_model}")
+            else:
+                logging.info(f"IMAGE_CAPTION_MODEL not set, falling back to TEXT_MODEL: {caption_model}")
         
         # Load output language
         if settings.output_language:
@@ -350,6 +355,10 @@ def _load_settings_to_config(app):
         if settings.image_caption_model_source:
             app.config['IMAGE_CAPTION_MODEL_SOURCE'] = settings.image_caption_model_source
             logging.info(f"Loaded IMAGE_CAPTION_MODEL_SOURCE from settings: {settings.image_caption_model_source}")
+        elif settings.text_model_source:
+            # Fall back to text model source so caption uses the same provider as text
+            app.config['IMAGE_CAPTION_MODEL_SOURCE'] = settings.text_model_source
+            logging.info(f"IMAGE_CAPTION_MODEL_SOURCE not set, falling back to TEXT_MODEL_SOURCE: {settings.text_model_source}")
 
         # Load per-model API credentials (for gemini/openai per-model overrides)
         for model_type in ('text', 'image', 'image_caption'):

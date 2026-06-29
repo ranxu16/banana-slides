@@ -36,6 +36,9 @@ const projectSettingsI18n = {
       iconSubjectExtraction: "图标透明背景",
       iconSubjectExtractionDesc: "开启后，导出时对识别为图标的图片调用本地 RMBG-2.0 模型抠图，获取透明背景 PNG 后再贴入 PPT，避免图标自带的原 PPT 背景在新底色上突兀显示。仅对识别为图标的元素生效，照片/插图保持原矩形裁剪。",
       iconSubjectExtractionTip: "基于 RMBG-2.0 ONNX 模型本地推理，首次使用会自动下载约 512MB 模型；单张图标处理失败时会自动回退到原矩形裁剪，不影响导出。",
+      visualStructureAnalysis: "视觉结构分析（Beta）",
+      visualStructureAnalysisDesc: "启用后，导出时会对每张幻灯片额外调用一次 Vision 模型，识别卡片容器、背景颜色和形状层次，在 PPTX 中生成矢量形状而非截图背景，提升可编辑性。每页额外消耗 1 次 Vision API 调用。",
+      visualStructureAnalysisTip: "实验性功能，建议先在单页测试效果后再开启全项目导出。分析失败时自动降级为无形状模式，不影响导出。",
       errorHandling: "错误处理策略", errorHandlingDesc: "配置导出过程中遇到错误时的处理方式",
       allowPartialResult: "允许返回半成品", allowPartialResultDesc: "开启后，导出过程中遇到错误（如样式提取失败、文本渲染失败等）时会跳过错误继续导出，最终可能得到不完整的结果。关闭时，任何错误都会立即停止导出并提示具体原因。",
       allowPartialResultWarning: "开启此选项可能导致导出的 PPTX 文件中部分文字样式丢失、元素位置错误或内容缺失。建议仅在需要快速获取结果且可以接受质量损失时开启。",
@@ -72,6 +75,9 @@ const projectSettingsI18n = {
       iconSubjectExtraction: "Icon Transparent Background",
       iconSubjectExtractionDesc: "When enabled, images detected as icons during export are processed via the local RMBG-2.0 model to produce transparent-background PNGs before being placed in the PPT, avoiding the icon's original background clashing with the new slide background. Only applies to elements classified as icons; photos and illustrations keep the original rectangular crop.",
       iconSubjectExtractionTip: "Powered by local RMBG-2.0 ONNX inference. The ~512MB model is downloaded automatically on first use. If extraction fails for an individual icon, it falls back silently to the original rectangular crop without affecting export.",
+      visualStructureAnalysis: "Visual Structure Analysis (Beta)",
+      visualStructureAnalysisDesc: "When enabled, a Vision model is called once per slide to detect card containers, background colors and shape hierarchy, generating vector shapes in the PPTX instead of a screenshot background — improving editability. Adds 1 Vision API call per page.",
+      visualStructureAnalysisTip: "Experimental. If analysis fails it automatically falls back to the no-shapes mode without affecting export. Test on a single page before enabling for the full project.",
       errorHandling: "Error Handling Strategy", errorHandlingDesc: "Configure how to handle errors during export",
       allowPartialResult: "Allow Partial Results", allowPartialResultDesc: "When enabled, export will skip errors (like style extraction or text rendering failures) and continue, potentially resulting in incomplete output. When disabled, any error will stop export immediately with a specific reason.",
       allowPartialResultWarning: "Enabling this option may result in PPTX files with missing text styles, mispositioned elements, or missing content. Only enable when you need quick results and can accept quality loss.",
@@ -97,10 +103,12 @@ interface ProjectSettingsModalProps {
   exportInpaintMethod?: ExportInpaintMethod;
   exportAllowPartial?: boolean;
   enableIconSubjectExtraction?: boolean;
+  enableVisualStructureAnalysis?: boolean;
   onExportExtractorMethodChange?: (value: ExportExtractorMethod) => void;
   onExportInpaintMethodChange?: (value: ExportInpaintMethod) => void;
   onExportAllowPartialChange?: (value: boolean) => void;
   onEnableIconSubjectExtractionChange?: (value: boolean) => void;
+  onEnableVisualStructureAnalysisChange?: (value: boolean) => void;
   onSaveExportSettings?: () => void;
   isSavingExportSettings?: boolean;
   aspectRatio?: string;
@@ -127,10 +135,12 @@ export const ProjectSettingsModal: React.FC<ProjectSettingsModalProps> = ({
   exportInpaintMethod = 'hybrid',
   exportAllowPartial = false,
   enableIconSubjectExtraction = true,
+  enableVisualStructureAnalysis = false,
   onExportExtractorMethodChange,
   onExportInpaintMethodChange,
   onExportAllowPartialChange,
   onEnableIconSubjectExtractionChange,
+  onEnableVisualStructureAnalysisChange,
   onSaveExportSettings,
   isSavingExportSettings = false,
   aspectRatio = '16:9',
@@ -436,6 +446,38 @@ export const ProjectSettingsModal: React.FC<ProjectSettingsModalProps> = ({
                     <AlertTriangle size={16} className="text-yellow-600 dark:text-yellow-500 flex-shrink-0 mt-0.5" />
                     <p className="text-xs text-gray-700 dark:text-foreground-secondary">
                       <strong>{t('projectSettings.tip')}：</strong>{t('projectSettings.iconSubjectExtractionTip')}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="pb-6 border-b border-gray-200 dark:border-border-primary space-y-4">
+                  <div>
+                    <h4 className="text-base font-semibold text-gray-900 dark:text-foreground-primary mb-2">{t('projectSettings.visualStructureAnalysis')}</h4>
+                  </div>
+                  <label className="flex items-start gap-3 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={enableVisualStructureAnalysis}
+                      onChange={(e) => onEnableVisualStructureAnalysisChange?.(e.target.checked)}
+                      className="mt-1 w-4 h-4 text-banana-500 focus:ring-banana-500 rounded"
+                    />
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2">
+                        <span className="font-medium text-gray-900 dark:text-foreground-primary">{t('projectSettings.visualStructureAnalysis')}</span>
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-amber-100 dark:bg-amber-900/30 text-amber-800 dark:text-amber-300">
+                          <Sparkles size={12} />
+                          {t('projectSettings.usesAiModel')}
+                        </span>
+                      </div>
+                      <div className="text-sm text-gray-600 dark:text-foreground-tertiary mt-1">
+                        {t('projectSettings.visualStructureAnalysisDesc')}
+                      </div>
+                    </div>
+                  </label>
+                  <div className="pl-4 border-l-4 border-yellow-300 dark:border-yellow-600 flex items-start gap-2">
+                    <AlertTriangle size={16} className="text-yellow-600 dark:text-yellow-500 flex-shrink-0 mt-0.5" />
+                    <p className="text-xs text-gray-700 dark:text-foreground-secondary">
+                      <strong>{t('projectSettings.tip')}：</strong>{t('projectSettings.visualStructureAnalysisTip')}
                     </p>
                   </div>
                 </div>

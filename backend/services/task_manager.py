@@ -411,7 +411,7 @@ def generate_descriptions_task(task_id: str, project_id: str, ai_service,
             pages = Page.query.filter_by(project_id=project_id).order_by(Page.order_index).all()
             
             if len(pages) != len(pages_data):
-                raise ValueError("Page count mismatch")
+                raise ValueError("页面数量不匹配")
             
             # Mark all pages as GENERATING_DESCRIPTION before starting
             for page in pages:
@@ -597,7 +597,7 @@ def generate_images_task(task_id: str, project_id: str, ai_service, file_service
                         # Get page from database in this thread
                         page_obj = Page.query.get(page_id)
                         if not page_obj:
-                            raise ValueError(f"Page {page_id} not found")
+                            raise ValueError(f"页面 {page_id} 不存在")
                         
                         def mark_generating():
                             page_for_update = Page.query.get(page_id)
@@ -613,7 +613,7 @@ def generate_images_task(task_id: str, project_id: str, ai_service, file_service
                             # Get description content
                             desc_content = page_obj.get_description_content()
                             if not desc_content:
-                                raise ValueError("No description content for page")
+                                raise ValueError("该页面缺少描述内容，请先生成描述")
                             
                             # 获取描述文本（可能是 text 字段或 text_content 数组）
                             desc_text = desc_content.get('text', '')
@@ -669,7 +669,7 @@ def generate_images_task(task_id: str, project_id: str, ai_service, file_service
                         logger.info(f"✅ Image generated successfully for page {page_index}")
                         
                         if not image:
-                            raise ValueError("Failed to generate image")
+                            raise ValueError("图片生成失败")
                         
                         # Check resolution for all providers
                         actual_res, is_match = check_image_resolution(image, resolution)
@@ -792,7 +792,7 @@ def generate_single_page_image_task(task_id: str, project_id: str, page_id: str,
             # Get page from database
             page = Page.query.get(page_id)
             if not page or page.project_id != project_id:
-                raise ValueError(f"Page {page_id} not found")
+                raise ValueError(f"页面 {page_id} 不存在")
             
             # Single-page requests should only flip to GENERATING after they acquire
             # a real image-generation slot.
@@ -802,7 +802,7 @@ def generate_single_page_image_task(task_id: str, project_id: str, page_id: str,
             # Get description content
             desc_content = page.get_description_content()
             if not desc_content:
-                raise ValueError("No description content for page")
+                raise ValueError("该页面缺少描述内容，请先生成描述")
             image_prompt_field_names = (
                 image_prompt_field_names
                 if image_prompt_field_names is not None
@@ -875,7 +875,7 @@ def generate_single_page_image_task(task_id: str, project_id: str, page_id: str,
                 )
             
             if not image:
-                raise ValueError("Failed to generate image")
+                raise ValueError("图片生成失败")
             
             # 保存图片并创建历史版本记录
             image_path, next_version = save_image_with_version(
@@ -938,10 +938,10 @@ def edit_page_image_task(task_id: str, project_id: str, page_id: str,
             # Get page from database
             page = Page.query.get(page_id)
             if not page or page.project_id != project_id:
-                raise ValueError(f"Page {page_id} not found")
+                raise ValueError(f"页面 {page_id} 不存在")
             
             if not page.generated_image_path:
-                raise ValueError("Page must have generated image first")
+                raise ValueError("该页面尚未生成图片，请先执行图片生成")
             
             # Get current image path
             current_image_path = file_service.get_absolute_path(page.generated_image_path)
@@ -981,7 +981,7 @@ def edit_page_image_task(task_id: str, project_id: str, page_id: str,
                         shutil.rmtree(temp_dir)
             
             if not image:
-                raise ValueError("Failed to edit image")
+                raise ValueError("图片编辑失败")
             
             # 保存编辑后的图片并创建历史版本记录
             image_path, next_version = save_image_with_version(
@@ -1077,7 +1077,7 @@ def generate_material_image_task(task_id: str, project_id: str, prompt: str,
                 )
             
             if not image:
-                raise ValueError("Failed to generate image")
+                raise ValueError("图片生成失败")
             
             # 处理project_id：如果为'global'或None，转换为None
             actual_project_id = None if (project_id == 'global' or project_id is None) else project_id
@@ -1233,7 +1233,7 @@ def process_material_image_task(
                     )
 
                     if generated is None:
-                        raise ValueError("Failed to process region edit")
+                        raise ValueError("区域编辑处理失败")
 
                     if generated.size != source_image.size:
                         generated = generated.resize(source_image.size, Image.Resampling.LANCZOS)
@@ -1246,7 +1246,7 @@ def process_material_image_task(
                     raise ValueError(f"Unsupported material operation: {operation}")
 
             if result_image is None:
-                raise ValueError("Failed to generate image")
+                raise ValueError("图片生成失败")
 
             actual_project_id = None if (project_id == 'global' or project_id is None) else project_id
             relative_path = file_service.save_material_image(result_image, actual_project_id)
@@ -1566,6 +1566,7 @@ def export_editable_pptx_with_recursive_analysis_task(
     export_extractor_method: str = 'hybrid',
     export_inpaint_method: str = 'hybrid',
     enable_icon_subject_extraction: bool = True,
+    enable_visual_structure_analysis: bool = False,
     app=None
 ):
     """
@@ -1591,19 +1592,25 @@ def export_editable_pptx_with_recursive_analysis_task(
         export_inpaint_method: 背景修复方法 ('generative', 'baidu', 'hybrid')
         app: Flask应用实例
     """
-    logger.info(f"🚀 Task {task_id} started: export_editable_pptx_with_recursive_analysis (project={project_id}, depth={max_depth}, workers={max_workers}, extractor={export_extractor_method}, inpaint={export_inpaint_method}, icon_subject_extraction={enable_icon_subject_extraction})")
+    logger.info(f"🚀 Task {task_id} started: export_editable_pptx_with_recursive_analysis (project={project_id}, depth={max_depth}, workers={max_workers}, extractor={export_extractor_method}, inpaint={export_inpaint_method}, icon_subject_extraction={enable_icon_subject_extraction}, visual_structure={enable_visual_structure_analysis})")
 
     if app is None:
         raise ValueError("Flask app instance must be provided")
 
     with app.app_context():
         import os
+        import time
         from datetime import datetime
         from PIL import Image
         from models import Project
         from services.export_service import ExportService, ExportError
 
         logger.info(f"开始递归分析导出任务 {task_id} for project {project_id}")
+        _task_start_time = time.time()
+
+        def _elapsed() -> str:
+            """返回从任务启动至今的耗时（秒）"""
+            return f"{time.time() - _task_start_time:.1f}s"
 
         try:
             project = Project.query.get(project_id)
@@ -1721,6 +1728,7 @@ def export_editable_pptx_with_recursive_analysis_task(
             logger.info(f"Step 3: 创建可编辑PPTX (extractor={export_extractor_method}, inpaint={export_inpaint_method}, fail_fast={fail_fast})...")
             progress_callback("配置", f"提取方法: {export_extractor_method}, 背景修复: {export_inpaint_method}", 6)
 
+            _export_start = time.time()
             _, export_warnings = ExportService.create_editable_pptx_with_recursive_analysis(
                 image_paths=image_paths,
                 output_file=output_path,
@@ -1733,10 +1741,17 @@ def export_editable_pptx_with_recursive_analysis_task(
                 export_extractor_method=export_extractor_method,
                 export_inpaint_method=export_inpaint_method,
                 enable_icon_subject_extraction=enable_icon_subject_extraction,
+                enable_visual_structure_analysis=enable_visual_structure_analysis,
                 fail_fast=fail_fast,
             )
+            _export_elapsed = time.time() - _export_start
 
             logger.info(f"✓ 可编辑PPTX已创建: {output_path}")
+            logger.info(
+                f"⏱ 性能统计 [{_elapsed()} total] "
+                f"ExportService={_export_elapsed:.1f}s "
+                f"({len(image_paths)} 页, depth={max_depth})"
+            )
 
             download_path = f"/files/{project_id}/exports/{filename}"
             progress_messages.append("✅ 导出完成！")
@@ -1766,7 +1781,7 @@ def export_editable_pptx_with_recursive_analysis_task(
                     "warning_details": export_warnings.to_dict() if export_warnings else {},
                 })
                 db.session.commit()
-                logger.info(f"✓ 任务 {task_id} 完成 - 递归分析导出成功（深度={max_depth}）")
+                logger.info(f"✓ 任务 {task_id} 完成 - 递归分析导出成功（深度={max_depth}）[总耗时 {_elapsed()}]")
 
         except ExportError as e:
             import traceback

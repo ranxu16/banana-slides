@@ -367,6 +367,8 @@ def update_project(project_id):
             project.export_allow_partial = data['export_allow_partial']
         if 'enable_icon_subject_extraction' in data:
             project.enable_icon_subject_extraction = bool(data['enable_icon_subject_extraction'])
+        if 'enable_visual_structure_analysis' in data:
+            project.enable_visual_structure_analysis = bool(data['enable_visual_structure_analysis'])
         
         # Update page order if provided
         if 'pages_order' in data:

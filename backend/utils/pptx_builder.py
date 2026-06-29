@@ -779,6 +779,164 @@ class PPTXBuilder:
         except Exception as e:
             logger.error(f"Failed to create table: {str(e)}")
     
+    def add_shape_element(
+        self,
+        slide,
+        shape_type: str,
+        bbox: List[int],
+        fill_color: Optional[str] = None,
+        corner_radius: float = 0.1,
+        transparency: float = 0.0,
+        border_color: Optional[str] = None,
+        border_width_px: float = 0,
+        shadow: Optional[Dict] = None,
+        dpi: int = None,
+    ):
+        """
+        在幻灯片上添加几何形状（矩形 / 圆角矩形 / 椭圆）。
+        任何内部错误都会被捕获并以 warning 形式记录，不向上抛出。
+
+        Args:
+            slide: 目标幻灯片
+            shape_type: 'rect' | 'rounded_rect' | 'ellipse'
+            bbox: [x0, y0, x1, y1]（像素坐标）
+            fill_color: '#RRGGBB' 填充色，None 为透明
+            corner_radius: 圆角比例 0.0–0.5（仅 rounded_rect 有效）
+            transparency: 填充透明度 0.0=不透明，1.0=完全透明
+            border_color: '#RRGGBB' 边框色，None 为无边框
+            border_width_px: 边框粗细（像素）
+            shadow: 阴影参数字典，含 blur_pt / offset_y_pt / color / opacity；None 为无阴影
+            dpi: 像素→英寸转换 DPI，默认 96
+        """
+        from pptx.dml.color import RGBColor as _RGBColor
+
+        dpi = dpi or self.DEFAULT_DPI
+
+        left   = Inches(self.pixels_to_inches(bbox[0], dpi))
+        top    = Inches(self.pixels_to_inches(bbox[1], dpi))
+        width  = Inches(self.pixels_to_inches(max(1, bbox[2] - bbox[0]), dpi))
+        height = Inches(self.pixels_to_inches(max(1, bbox[3] - bbox[1]), dpi))
+
+        # python-pptx auto-shape IDs: 1=矩形, 5=圆角矩形, 9=椭圆
+        _SHAPE_ID = {'rect': 1, 'rounded_rect': 5, 'ellipse': 9}
+        shape_id = _SHAPE_ID.get(shape_type, 1)
+
+        try:
+            shape = slide.shapes.add_shape(shape_id, left, top, width, height)
+        except Exception as e:
+            logger.warning(f"add_shape_element: 创建形状失败 ({shape_type}): {e}")
+            return None
+
+        # 圆角比例
+        if shape_type == 'rounded_rect':
+            try:
+                shape.adjustments[0] = max(0.0, min(0.5, corner_radius))
+            except Exception:
+                pass
+
+        # 填充色
+        if fill_color and len(fill_color) >= 7:
+            try:
+                r = int(fill_color[1:3], 16)
+                g = int(fill_color[3:5], 16)
+                b = int(fill_color[5:7], 16)
+                shape.fill.solid()
+                shape.fill.fore_color.rgb = _RGBColor(r, g, b)
+                # 透明度通过 XML 注入（python-pptx 未直接暴露）
+                if 0.0 < transparency <= 1.0:
+                    alpha_val = int((1.0 - transparency) * 100000)
+                    sp_pr = shape._element.spPr
+                    solid = sp_pr.find(qn('a:solidFill'))
+                    if solid is not None:
+                        srgb = solid.find(qn('a:srgbClr'))
+                        if srgb is None:
+                            srgb = OxmlElement('a:srgbClr')
+                            srgb.set('val', fill_color[1:].upper())
+                            solid.append(srgb)
+                        alpha_elem = OxmlElement('a:alpha')
+                        alpha_elem.set('val', str(alpha_val))
+                        srgb.append(alpha_elem)
+            except Exception as e:
+                logger.warning(f"add_shape_element: 设置填充色失败: {e}")
+        else:
+            try:
+                shape.fill.background()
+            except Exception:
+                pass
+
+        # 边框
+        if border_color and border_width_px > 0 and len(border_color) >= 7:
+            try:
+                r = int(border_color[1:3], 16)
+                g = int(border_color[3:5], 16)
+                b = int(border_color[5:7], 16)
+                shape.line.color.rgb = _RGBColor(r, g, b)
+                shape.line.width = Pt(border_width_px * 72 / dpi)
+            except Exception as e:
+                logger.warning(f"add_shape_element: 设置边框失败: {e}")
+        else:
+            try:
+                shape.line.fill.background()
+            except Exception:
+                pass
+
+        # 阴影（XML 注入）
+        if shadow and isinstance(shadow, dict):
+            try:
+                sp_pr = shape._element.spPr
+                effect_lst = sp_pr.find(qn('a:effectLst'))
+                if effect_lst is None:
+                    effect_lst = OxmlElement('a:effectLst')
+                    sp_pr.append(effect_lst)
+
+                outer = OxmlElement('a:outerShdw')
+                blur_emu   = int(shadow.get('blur_pt', 8) * 12700)
+                offset_emu = int(shadow.get('offset_y_pt', 4) * 12700)
+                opacity    = int(shadow.get('opacity', 0.3) * 100000)
+                s_color    = shadow.get('color', '#000000')
+                outer.set('blurRad', str(blur_emu))
+                outer.set('dist',    str(offset_emu))
+                outer.set('dir',     '5400000')   # 90°朝下
+                outer.set('algn',    'tl')
+                outer.set('rotWithShape', '0')
+
+                srgb = OxmlElement('a:srgbClr')
+                srgb.set('val', s_color.lstrip('#').upper())
+                alpha_elem = OxmlElement('a:alpha')
+                alpha_elem.set('val', str(opacity))
+                srgb.append(alpha_elem)
+                outer.append(srgb)
+                effect_lst.append(outer)
+            except Exception as e:
+                logger.warning(f"add_shape_element: 设置阴影失败: {e}")
+
+        logger.debug(f"已添加形状: {shape_type} bbox={bbox} fill={fill_color}")
+        return shape
+
+    @staticmethod
+    def set_slide_background_color(slide, hex_color: str):
+        """
+        将幻灯片背景设置为纯色（替代背景图片）。
+        任何内部错误都会被捕获并以 warning 记录，不向上抛出。
+
+        Args:
+            slide: 目标幻灯片
+            hex_color: '#RRGGBB' 格式的颜色字符串
+        """
+        from pptx.dml.color import RGBColor as _RGBColor
+        try:
+            if not hex_color or len(hex_color) < 7:
+                return
+            r = int(hex_color[1:3], 16)
+            g = int(hex_color[3:5], 16)
+            b = int(hex_color[5:7], 16)
+            background = slide.background
+            fill = background.fill
+            fill.solid()
+            fill.fore_color.rgb = _RGBColor(r, g, b)
+        except Exception as e:
+            logger.warning(f"set_slide_background_color: 设置背景色失败 ({hex_color}): {e}")
+
     def save(self, output_path: str):
         """
         Save presentation to file

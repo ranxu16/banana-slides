@@ -178,6 +178,64 @@ class ExportWarnings:
         }
 
 
+# ---------------------------------------------------------------------------
+# 视觉结构分析相关数据类与工具（Visual Structure Analysis）
+# ---------------------------------------------------------------------------
+
+@dataclass
+class SlideStructure:
+    """
+    Vision 模型对单张幻灯片的视觉结构分析结果。
+    background_type 为 'solid'/'gradient'/'image'；
+    shapes 中每项对应一个可渲染的矢量形状。
+    """
+    background_type: str = 'image'
+    background_color: Optional[str] = None  # '#RRGGBB'，仅 solid 时有效
+    shapes: List[Dict] = field(default_factory=list)
+    # shapes 每项结构：
+    # {shape_type, bbox:[x0,y0,x1,y1], fill_color, corner_radius,
+    #  transparency, border_color, border_width_px, shadow}
+
+
+_VISUAL_STRUCTURE_PROMPT = """\
+你是PPT视觉结构分析专家。请分析这张幻灯片，识别以下信息，**只返回JSON，不要任何说明文字**：
+
+1. 背景的颜色类型（纯色/渐变/图片）
+2. 幻灯片中明显的卡片容器、色块区域（有填充色的矩形/圆角矩形/椭圆，厚度 ≥ 4px，忽略细线装饰）
+
+图片分辨率：{width}x{height} 像素
+已识别的文本元素坐标参考：
+{text_elements_json}
+
+返回格式（严格JSON，不要注释）：
+{{
+  "background": {{
+    "type": "solid",
+    "color": "#1A1A2E"
+  }},
+  "shapes": [
+    {{
+      "type": "rounded_rect",
+      "bbox": [120, 200, 800, 500],
+      "fill_color": "#2D2D44",
+      "corner_radius": 0.1,
+      "transparency": 0.0,
+      "border_color": null,
+      "border_width_px": 0,
+      "shadow": {{"blur_pt": 6, "offset_y_pt": 3, "color": "#000000", "opacity": 0.25}}
+    }}
+  ]
+}}
+
+注意：
+- bbox 坐标必须在图片范围内 [0,0,{width},{height}]
+- 不要识别文字本身，只识别承载文字的容器形状
+- background.type 只能是 "solid"、"gradient" 或 "image"
+- 如果背景是纯色，color 填写十六进制颜色；否则填 null
+- shapes 数组可以为空 []
+"""
+
+
 def _get_page_size_inches(aspect_ratio: str = '16:9', base: float = 10.0) -> Tuple[float, float]:
     """Return (width, height) in inches for a given aspect ratio string."""
     try:
@@ -206,6 +264,82 @@ class ExportService:
         'checker',
         'wheel',
     }
+
+    @staticmethod
+    def _analyze_slide_visual_structure(
+        image_path: str,
+        text_elements: List[Dict],
+        ai_service,
+        image_width: int = 1920,
+        image_height: int = 1080,
+    ) -> Optional['SlideStructure']:
+        """
+        调用 Vision API 分析单张幻灯片的视觉结构（背景色 + 卡片形状）。
+        任何失败都返回 None，调用方应降级为无形状渲染（保持与当前行为一致）。
+
+        Args:
+            image_path: 幻灯片原始图片路径
+            text_elements: [{'id': str, 'text': str, 'bbox': [x0,y0,x1,y1]}]
+            ai_service: AIService 实例（需支持 generate_json_with_image）
+            image_width / image_height: 图片像素尺寸（用于 prompt 和坐标验证）
+
+        Returns:
+            SlideStructure 或 None
+        """
+        try:
+            # 截断：最多 80 个元素，每个元素文字取前 20 字符
+            safe_elements = [
+                {'id': e['id'], 'text': e['text'][:20], 'bbox': e['bbox']}
+                for e in text_elements[:80]
+            ]
+            prompt = _VISUAL_STRUCTURE_PROMPT.format(
+                width=image_width,
+                height=image_height,
+                text_elements_json=json.dumps(safe_elements, ensure_ascii=False),
+            )
+            result = ai_service.generate_json_with_image(prompt=prompt, image_path=image_path)
+
+            structure = SlideStructure()
+            if not isinstance(result, dict):
+                logger.warning("视觉结构分析: 返回值不是 dict，跳过")
+                return None
+
+            bg = result.get('background', {}) or {}
+            structure.background_type  = bg.get('type', 'image')
+            structure.background_color = bg.get('color')
+
+            for s in result.get('shapes', []) or []:
+                bbox = s.get('bbox', [])
+                if (
+                    len(bbox) != 4
+                    or bbox[2] <= bbox[0]
+                    or bbox[3] <= bbox[1]
+                    or bbox[0] < 0 or bbox[1] < 0
+                    or bbox[2] > image_width * 1.05   # 允许 5% 误差
+                    or bbox[3] > image_height * 1.05
+                ):
+                    logger.debug(f"视觉结构分析: 无效 bbox {bbox}，跳过该形状")
+                    continue
+                structure.shapes.append({
+                    'shape_type':      s.get('type', 'rect'),
+                    'bbox':            [int(v) for v in bbox],
+                    'fill_color':      s.get('fill_color'),
+                    'corner_radius':   float(s.get('corner_radius', 0.1)),
+                    'transparency':    float(s.get('transparency', 0.0)),
+                    'border_color':    s.get('border_color'),
+                    'border_width_px': float(s.get('border_width_px', 0)),
+                    'shadow':          s.get('shadow'),
+                })
+
+            logger.info(
+                f"视觉结构分析完成: background={structure.background_type}({structure.background_color}), "
+                f"shapes={len(structure.shapes)}"
+            )
+            return structure
+
+        except Exception as e:
+            logger.warning(f"视觉结构分析失败，将跳过形状渲染: {e}")
+            return None
 
     @staticmethod
     def _apply_slide_transition(slide, effect: str) -> None:
@@ -418,7 +552,7 @@ class ExportService:
                 logger.warning(f"Image not found and will be skipped for PDF export: {p}")
 
         if not valid_paths:
-            raise ValueError("No valid images found for PDF export")
+            raise ValueError("未找到有效图片，无法导出 PDF")
 
         try:
             logger.info(f"Using img2pdf for PDF export ({len(valid_paths)} pages, low memory mode)")
@@ -526,7 +660,7 @@ class ExportService:
             images.append(img)
 
         if not images:
-            raise ValueError("No valid images found for PDF export")
+            raise ValueError("未找到有效图片，无法导出 PDF")
 
         # Save as PDF
         if output_file:
@@ -1091,9 +1225,27 @@ class ExportService:
         # Step 2: 并行执行两种识别
         global_results = {}  # 全局识别结果
         local_results = {}   # 单个裁剪识别结果
-        
+
+        # 快速中止标志：当检测到"模型不支持"类错误时，立即中止所有剩余任务
+        import threading
+        _abort_event = threading.Event()
+
+        def _is_model_unsupported_error(error_msg: str) -> bool:
+            """检测是否为"模型不支持"类400错误，需立即中止所有任务"""
+            indicators = [
+                'is not supported',
+                'invalid_request_error',
+                'model_not_found',
+                'does not exist',
+                '不支持图片输入',
+            ]
+            low = error_msg.lower()
+            return any(i.lower() in low for i in indicators)
+
         def extract_global_for_page(page_idx, page_data):
             """全局识别单页"""
+            if _abort_event.is_set():
+                return page_idx, {}, "已中止（模型不支持，跳过剩余任务）"
             try:
                 results = text_attribute_extractor.extract_batch_with_full_image(
                     full_image=page_data['image_path'],
@@ -1101,8 +1253,13 @@ class ExportService:
                 )
                 return page_idx, results, None
             except Exception as e:
-                logger.warning(f"全局识别页面 {page_idx + 1} 失败: {e}")
-                return page_idx, {}, str(e)
+                error_msg = str(e)
+                if _is_model_unsupported_error(error_msg):
+                    _abort_event.set()
+                    logger.warning(f"全局识别页面 {page_idx + 1} 失败（模型不支持，已触发全局中止）: {e}")
+                else:
+                    logger.warning(f"全局识别页面 {page_idx + 1} 失败: {e}")
+                return page_idx, {}, error_msg
         
         # 收集失败信息
         failed_extractions = []  # [(element_id, reason), ...]
@@ -1110,6 +1267,8 @@ class ExportService:
         def extract_local_single(item):
             """单个裁剪识别"""
             element_id, image_path, text_content = item
+            if _abort_event.is_set():
+                return element_id, None, "已中止（模型不支持，跳过剩余任务）"
             try:
                 style = text_attribute_extractor.extract(
                     image=image_path,
@@ -1122,6 +1281,8 @@ class ExportService:
                     return element_id, style, None
                 else:
                     error_msg = style.metadata.get('error', '样式提取返回空') if style else "样式提取返回空"
+                    if _is_model_unsupported_error(error_msg):
+                        _abort_event.set()
                     if fail_fast:
                         raise ExportService._build_style_extraction_error(
                             error_msg,
@@ -1132,14 +1293,17 @@ class ExportService:
             except ExportError:
                 raise  # 重新抛出 ExportError
             except Exception as e:
+                error_msg = str(e)
+                if _is_model_unsupported_error(error_msg):
+                    _abort_event.set()
                 logger.warning(f"单个识别失败 [{element_id}]: {e}")
                 if fail_fast:
                     raise ExportService._build_style_extraction_error(
-                        str(e),
+                        error_msg,
                         element_id=element_id,
                         text_content=text_content
                     )
-                return element_id, None, str(e)
+                return element_id, None, error_msg
         
         # 并发执行全局识别和单个裁剪识别
         logger.info(f"  并发执行: 全局识别 {len(page_text_elements)} 页 + 单个识别 {len(all_text_items)} 个元素...")
@@ -1259,6 +1423,7 @@ class ExportService:
         export_extractor_method: str = 'hybrid',  # 组件提取方法: mineru, hybrid
         export_inpaint_method: str = 'hybrid',  # 背景修复方法: generative, baidu, hybrid
         enable_icon_subject_extraction: bool = False,  # 是否对小尺寸图标走百度智能抠图
+        enable_visual_structure_analysis: bool = False,  # 是否启用 Vision 视觉结构分析（Beta）
         fail_fast: bool = True  # 是否在遇到错误时立即停止（False则收集警告继续）
     ) -> Tuple[Optional[bytes], ExportWarnings]:
         """
@@ -1359,6 +1524,42 @@ class ExportService:
                 
                 editable_images = results
         
+        # 2.7. [可选] 视觉结构分析 —— 每页一次 Vision 调用，识别背景色和卡片形状
+        # 通过 enable_visual_structure_analysis 开关控制，默认关闭，失败自动降级
+        slide_structures: List[Optional[SlideStructure]] = [None] * len(editable_images)
+        if enable_visual_structure_analysis:
+            report_progress("结构分析", f"开始视觉结构分析（{len(editable_images)} 页）...", 40)
+            try:
+                from services.ai_service import get_ai_service
+                _vis_ai = get_ai_service()
+                for _idx, _eimg in enumerate(editable_images):
+                    # 复用批量全图识别的数据结构（包含 element_id / text / bbox）
+                    _batch_elements = ExportService._collect_text_elements_for_batch_extraction(_eimg.elements)
+                    _text_elems = [
+                        {
+                            'id': e.get('element_id') or e.get('id') or '',
+                            'text': e.get('text') or e.get('content') or '',
+                            'bbox': e.get('bbox') or [0, 0, 0, 0],
+                        }
+                        for e in _batch_elements
+                    ]
+                    slide_structures[_idx] = ExportService._analyze_slide_visual_structure(
+                        image_path=_eimg.image_path,
+                        text_elements=_text_elems,
+                        ai_service=_vis_ai,
+                        image_width=_eimg.width,
+                        image_height=_eimg.height,
+                    )
+                    _pct = 40 + int(5 * (_idx + 1) / len(editable_images))
+                    report_progress(
+                        "结构分析",
+                        f"✓ 第 {_idx + 1}/{len(editable_images)} 页结构分析完成",
+                        _pct,
+                    )
+            except Exception as _e:
+                logger.warning(f"视觉结构分析阶段出错，已跳过: {_e}")
+                slide_structures = [None] * len(editable_images)
+
         # 2.5. 使用混合策略提取所有文本元素的样式（如果提供了提取器）
         # 混合策略：全局识别（粗体/斜体/下划线/对齐）+ 单个裁剪识别（颜色）
         text_styles_cache = {}
@@ -1436,7 +1637,21 @@ class ExportService:
                     )
                 except Exception as e:
                     logger.error(f"Failed to add background: {e}")
-            
+
+            # 插入 Vision 识别出的矢量形状（卡片背景等）
+            _structure = slide_structures[page_idx] if slide_structures else None
+            if _structure and _structure.shapes:
+                logger.info(f"    添加 {len(_structure.shapes)} 个视觉结构形状")
+                for _spec in _structure.shapes:
+                    try:
+                        builder.add_shape_element(
+                            slide=slide,
+                            dpi=96,
+                            **_spec
+                        )
+                    except Exception as _e:
+                        logger.warning(f"    形状渲染失败（已跳过）: {_e}")
+
             # 添加所有元素（递归地）
             # 计算缩放比例：将原始图片坐标映射到统一的幻灯片坐标
             # 背景图已经缩放到幻灯片尺寸，所以元素坐标也需要相应缩放

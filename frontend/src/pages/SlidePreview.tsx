@@ -466,6 +466,9 @@ export const SlidePreview: React.FC = () => {
   const [enableIconSubjectExtraction, setEnableIconSubjectExtraction] = useState<boolean>(
     currentProject?.enable_icon_subject_extraction ?? true
   );
+  const [enableVisualStructureAnalysis, setEnableVisualStructureAnalysis] = useState<boolean>(
+    currentProject?.enable_visual_structure_analysis ?? false
+  );
   const [isSavingExportSettings, setIsSavingExportSettings] = useState(false);
   // 画面比例
   const [aspectRatio, setAspectRatio] = useState<string>(
@@ -578,6 +581,7 @@ export const SlidePreview: React.FC = () => {
         setExportInpaintMethod((currentProject.export_inpaint_method as ExportInpaintMethod) || 'hybrid');
         setExportAllowPartial(currentProject.export_allow_partial || false);
         setEnableIconSubjectExtraction(currentProject.enable_icon_subject_extraction ?? true);
+        setEnableVisualStructureAnalysis(currentProject.enable_visual_structure_analysis ?? false);
         setAspectRatio(currentProject.image_aspect_ratio || '16:9');
         lastProjectId.current = currentProject.id || null;
         isEditingRequirements.current = false;
@@ -596,10 +600,11 @@ export const SlidePreview: React.FC = () => {
         setExportInpaintMethod((currentProject.export_inpaint_method as ExportInpaintMethod) || 'hybrid');
         setExportAllowPartial(currentProject.export_allow_partial || false);
         setEnableIconSubjectExtraction(currentProject.enable_icon_subject_extraction ?? true);
+        setEnableVisualStructureAnalysis(currentProject.enable_visual_structure_analysis ?? false);
       }
       // 如果用户正在编辑，则不更新本地状态
     }
-  }, [currentProject?.id, currentProject?.extra_requirements, currentProject?.template_style, currentProject?.image_aspect_ratio, currentProject?.export_extractor_method, currentProject?.export_inpaint_method, currentProject?.export_allow_partial, currentProject?.enable_icon_subject_extraction]);
+  }, [currentProject?.id, currentProject?.extra_requirements, currentProject?.template_style, currentProject?.image_aspect_ratio, currentProject?.export_extractor_method, currentProject?.export_inpaint_method, currentProject?.export_allow_partial, currentProject?.enable_icon_subject_extraction, currentProject?.enable_visual_structure_analysis]);
 
   // 加载当前页面的历史版本
   useEffect(() => {
@@ -1406,7 +1411,8 @@ export const SlidePreview: React.FC = () => {
         export_extractor_method: exportExtractorMethod,
         export_inpaint_method: exportInpaintMethod,
         export_allow_partial: exportAllowPartial,
-        enable_icon_subject_extraction: enableIconSubjectExtraction
+        enable_icon_subject_extraction: enableIconSubjectExtraction,
+        enable_visual_structure_analysis: enableVisualStructureAnalysis
       });
       // 更新本地项目状态
       await syncProject(projectId);
@@ -1419,7 +1425,7 @@ export const SlidePreview: React.FC = () => {
     } finally {
       setIsSavingExportSettings(false);
     }
-  }, [currentProject, projectId, exportExtractorMethod, exportInpaintMethod, exportAllowPartial, enableIconSubjectExtraction, syncProject, show, t]);
+  }, [currentProject, projectId, exportExtractorMethod, exportInpaintMethod, exportAllowPartial, enableIconSubjectExtraction, enableVisualStructureAnalysis, syncProject, show, t]);
 
   const handleSaveAspectRatio = useCallback(async () => {
     if (!currentProject || !projectId) return;
@@ -2934,10 +2940,12 @@ export const SlidePreview: React.FC = () => {
             exportInpaintMethod={exportInpaintMethod}
             exportAllowPartial={exportAllowPartial}
             enableIconSubjectExtraction={enableIconSubjectExtraction}
+            enableVisualStructureAnalysis={enableVisualStructureAnalysis}
             onExportExtractorMethodChange={setExportExtractorMethod}
             onExportInpaintMethodChange={setExportInpaintMethod}
             onExportAllowPartialChange={setExportAllowPartial}
             onEnableIconSubjectExtractionChange={setEnableIconSubjectExtraction}
+            onEnableVisualStructureAnalysisChange={setEnableVisualStructureAnalysis}
             onSaveExportSettings={handleSaveExportSettings}
             isSavingExportSettings={isSavingExportSettings}
             // 画面比例

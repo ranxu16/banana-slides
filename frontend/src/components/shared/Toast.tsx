@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useRef } from 'react';
 import { X, CheckCircle, AlertCircle, AlertTriangle, Info } from 'lucide-react';
 import { cn } from '@/utils';
 
@@ -15,12 +15,16 @@ export const Toast: React.FC<ToastProps> = ({
   onClose,
   duration = type === 'error' ? 5000 : 3000,
 }) => {
+  // 用 ref 持有最新的 onClose，避免 onClose 每次 re-render 变引用导致 timer 被反复重置
+  const onCloseRef = useRef(onClose);
+  onCloseRef.current = onClose;
+
   useEffect(() => {
     if (duration > 0) {
-      const timer = setTimeout(onClose, duration);
+      const timer = setTimeout(() => onCloseRef.current(), duration);
       return () => clearTimeout(timer);
     }
-  }, [duration, onClose]);
+  }, [duration]); // 只依赖 duration，不依赖 onClose
 
   const icons = {
     success: <CheckCircle size={20} />,
