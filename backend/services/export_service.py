@@ -192,19 +192,56 @@ class SlideStructure:
     background_type: str = 'image'
     background_color: Optional[str] = None  # '#RRGGBB'，仅 solid 时有效
     shapes: List[Dict] = field(default_factory=list)
+    image_layers: List[Dict] = field(default_factory=list)
     # shapes 每项结构：
     # {shape_type, bbox:[x0,y0,x1,y1], fill_color, corner_radius,
     #  transparency, border_color, border_width_px, shadow}
 
 
 _VISUAL_STRUCTURE_PROMPT = """\
-你是PPT视觉结构分析专家。请分析这张幻灯片，识别以下信息，**只返回JSON，不要任何说明文字**：
+你是PPT视觉结构分析专家。目标：将幻灯片的视觉元素**尽可能多地分解为独立可编辑图层**。
+请系统地从底层到顶层识别所有有颜色填充的形状和非文字图片元素，**只返回JSON，不要任何说明文字**。
 
-1. 背景的颜色类型（纯色/渐变/图片）
-2. 幻灯片中明显的卡片容器、色块区域（有填充色的矩形/圆角矩形/椭圆，厚度 ≥ 4px，忽略细线装饰）
+## 背景分析
+判断幻灯片整体背景类型：
+- "solid"：整个背景是均匀纯色（包括深色/浅色纯色背景）
+- "gradient"：背景有渐变色
+- "image"：背景包含照片、纹理或复杂图案
+
+## 形状识别（重要：请尽量多识别，宁多勿少）
+**从底层到顶层**，识别所有以下类型的视觉形状：
+
+1. **大面积背景色块**：占据幻灯片大部分区域的有色区域（如深色背景、标题背景色块）
+2. **标题栏/顶部色条**：顶部或底部的横向色条
+3. **内容卡片**：承载文字或图标的圆角矩形、矩形卡片，包括白色/浅色卡片
+4. **信息面板/侧边栏**：左侧或右侧的纵向色块
+5. **数字/序号背景**：圆形、菱形等小型编号容器
+6. **标签/徽章**：小型标注、pill形状、tag形状
+7. **进度条/时间线**：横向或纵向的条状色块
+8. **图标容器**：承载图标的圆形或方形背景
+9. **时间轴线条**：水平或垂直的渐变/纯色线条（任意宽度，哪怕只有2px，只要是独立的色条）
+10. **时间轴节点**：线条上的小圆形/圆点（彩色实心圆），用 ellipse 类型识别
+11. **分隔装饰**：有明显宽度（≥3px）的横线或竖线色块
+12. **半透明蒙层**：带透明度的覆盖层
+
+**关键提示：**
+- 即使卡片/色块颜色接近背景色（如白色卡片在浅色背景上），只要有可见边框、阴影或轻微颜色差异，也必须识别
+- 圆角矩形卡片哪怕边框只有1-2px细线也要识别，fill_color 取卡片内部填充色
+- 时间轴上的彩色圆点（通常直径10-30px）必须用 ellipse 类型识别，fill_color 取圆点颜色
+- 宁可多识别（后续可手动删除），不要漏识别
+**只要能目视区分为独立色块/形状的，都应当识别出来。忽略：纯文字本身。**
+
+## 非文字图片层识别（必须拆层）
+请额外识别所有不能用普通 PPT 形状高保真表达、但应当在 PPT 中独立拖动的内容元素：
+- 图标、复杂 icon、logo、徽章、钻石、贴纸、3D 插画、中心大图、人物/产品/设备图
+- 卡片内的独立装饰图形、模块图标、复杂渐变图案
+- 数据图中的非文字图形块（如果不是简单矩形/圆形）
+
+不要把图标、文字和卡片合成一张图；卡片/容器应放在 shapes，图标/复杂插画应放在 image_layers。
+背景圆环、连线、光效、点阵、纯装饰纹理可以作为 background/decorative 图层；承载内容的模块元素必须独立拆出来。
 
 图片分辨率：{width}x{height} 像素
-已识别的文本元素坐标参考：
+已识别的文本元素坐标参考（用于辅助定位承载文字的容器）：
 {text_elements_json}
 
 返回格式（严格JSON，不要注释）：
@@ -224,15 +261,30 @@ _VISUAL_STRUCTURE_PROMPT = """\
       "border_width_px": 0,
       "shadow": {{"blur_pt": 6, "offset_y_pt": 3, "color": "#000000", "opacity": 0.25}}
     }}
+  ],
+  "image_layers": [
+    {{
+      "type": "icon",
+      "bbox": [160, 260, 230, 330],
+      "description": "white outline rocket icon inside the top-left module",
+      "transparent_background": true,
+      "role": "content"
+    }}
   ]
 }}
 
-注意：
-- bbox 坐标必须在图片范围内 [0,0,{width},{height}]
-- 不要识别文字本身，只识别承载文字的容器形状
-- background.type 只能是 "solid"、"gradient" 或 "image"
-- 如果背景是纯色，color 填写十六进制颜色；否则填 null
-- shapes 数组可以为空 []
+字段说明：
+- type: "rect"（矩形）、"rounded_rect"（圆角矩形）、"ellipse"（椭圆/圆形）
+- bbox: [x_left, y_top, x_right, y_bottom]，坐标必须在 [0,0,{width},{height}] 范围内
+- fill_color: 十六进制颜色 "#RRGGBB"，必须填写
+- corner_radius: 0.0~0.5，圆角程度（仅 rounded_rect 有效）
+- transparency: 0.0（不透明）~ 1.0（完全透明）
+- border_color: 边框颜色或 null
+- border_width_px: 边框宽度像素，无边框填 0
+- shadow: 有阴影填写 {{"blur_pt":..., "offset_y_pt":..., "color":"#000000", "opacity":...}}，无阴影填 null
+- background.color：背景是纯色时填十六进制颜色，其他情况填 null
+- shapes 可以为空 []，但请尽量多识别
+- image_layers 可以为空 []；role 为 "content" 或 "decorative"，内容模块内的图标/插画必须为 content
 """
 
 
@@ -331,9 +383,29 @@ class ExportService:
                     'shadow':          s.get('shadow'),
                 })
 
+            for layer in result.get('image_layers', []) or []:
+                bbox = layer.get('bbox', [])
+                if (
+                    len(bbox) != 4
+                    or bbox[2] <= bbox[0]
+                    or bbox[3] <= bbox[1]
+                    or bbox[0] < 0 or bbox[1] < 0
+                    or bbox[2] > image_width * 1.05
+                    or bbox[3] > image_height * 1.05
+                ):
+                    logger.debug(f"视觉结构分析: 无效 image_layer bbox {bbox}，跳过")
+                    continue
+                structure.image_layers.append({
+                    'type': layer.get('type', 'image'),
+                    'bbox': [int(v) for v in bbox],
+                    'description': layer.get('description') or '',
+                    'transparent_background': bool(layer.get('transparent_background', False)),
+                    'role': layer.get('role', 'content'),
+                })
+
             logger.info(
                 f"视觉结构分析完成: background={structure.background_type}({structure.background_color}), "
-                f"shapes={len(structure.shapes)}"
+                f"shapes={len(structure.shapes)}, image_layers={len(structure.image_layers)}"
             )
             return structure
 
@@ -394,6 +466,355 @@ class ExportService:
             insert_at = slide_element.index(c_sld) + 1 if c_sld is not None else 0
 
         slide_element.insert(insert_at, transition)
+
+    @staticmethod
+    def _crop_visual_image_layers(
+        image_path: str,
+        image_layers: List[Dict],
+        output_dir: Path,
+        page_idx: int,
+    ) -> List[Dict]:
+        """Materialize Vision-discovered non-text layers as independent image files."""
+        if not image_layers:
+            return []
+
+        output_dir.mkdir(parents=True, exist_ok=True)
+        materialized = []
+
+        try:
+            with Image.open(image_path) as source:
+                source = source.convert('RGBA')
+                for idx, layer in enumerate(image_layers):
+                    bbox = layer.get('bbox') or []
+                    if len(bbox) != 4:
+                        continue
+                    crop_box = (
+                        max(0, int(bbox[0])),
+                        max(0, int(bbox[1])),
+                        min(source.width, int(bbox[2])),
+                        min(source.height, int(bbox[3])),
+                    )
+                    if crop_box[2] <= crop_box[0] or crop_box[3] <= crop_box[1]:
+                        continue
+                    cropped = source.crop(crop_box)
+                    layer_path = output_dir / f"page_{page_idx + 1}_layer_{idx + 1}.png"
+                    cropped.save(layer_path)
+                    materialized.append({
+                        **layer,
+                        'image_path': str(layer_path),
+                    })
+        except Exception as e:
+            logger.warning(f"视觉图片层裁切失败，已跳过: {e}")
+
+        return materialized
+
+    @staticmethod
+    def _build_visual_background_without_layers(
+        image_path: str,
+        structure: 'SlideStructure',
+        output_dir: Path,
+        page_idx: int,
+    ) -> Optional[str]:
+        """Create a background image with Vision-discovered content regions removed."""
+        if not structure or (not structure.shapes and not structure.image_layers):
+            return None
+
+        output_dir.mkdir(parents=True, exist_ok=True)
+
+        try:
+            with Image.open(image_path) as source:
+                bg = source.convert('RGB')
+                width, height = bg.size
+                regions = []
+
+                for spec in structure.shapes:
+                    bbox = spec.get('bbox') or []
+                    if len(bbox) != 4:
+                        continue
+                    area = max(0, bbox[2] - bbox[0]) * max(0, bbox[3] - bbox[1])
+                    if area / max(1, width * height) < 0.75:
+                        regions.append(bbox)
+
+                for layer in structure.image_layers:
+                    if layer.get('role', 'content') == 'content':
+                        bbox = layer.get('bbox') or []
+                        if len(bbox) == 4:
+                            regions.append(bbox)
+
+                if not regions:
+                    return None
+
+                for bbox in regions:
+                    x0, y0, x1, y1 = [int(v) for v in bbox]
+                    x0 = max(0, min(width - 1, x0))
+                    y0 = max(0, min(height - 1, y0))
+                    x1 = max(x0 + 1, min(width, x1))
+                    y1 = max(y0 + 1, min(height, y1))
+                    pad = max(6, int(min(x1 - x0, y1 - y0) * 0.08))
+
+                    sample_box = (
+                        max(0, x0 - pad),
+                        max(0, y0 - pad),
+                        min(width, x1 + pad),
+                        min(height, y1 + pad),
+                    )
+                    sample = bg.crop(sample_box)
+                    pixels = list(sample.getdata())
+                    inner_x0 = x0 - sample_box[0]
+                    inner_y0 = y0 - sample_box[1]
+                    inner_x1 = x1 - sample_box[0]
+                    inner_y1 = y1 - sample_box[1]
+                    border_pixels = [
+                        pixel for idx, pixel in enumerate(pixels)
+                        if not (
+                            inner_x0 <= idx % sample.width < inner_x1
+                            and inner_y0 <= idx // sample.width < inner_y1
+                        )
+                    ] or pixels
+                    med = tuple(sorted(pixel[c] for pixel in border_pixels)[len(border_pixels) // 2] for c in range(3))
+                    fill = Image.new('RGB', (x1 - x0, y1 - y0), med)
+                    bg.paste(fill, (x0, y0))
+
+                bg_path = output_dir / f"page_{page_idx + 1}_visual_background.png"
+                bg.save(bg_path)
+                return str(bg_path)
+        except Exception as e:
+            logger.warning(f"生成视觉拆层背景失败，已回退原背景: {e}")
+            return None
+
+    @staticmethod
+    def _sample_region_color(image: Image.Image, bbox: List[int]) -> str:
+        """Sample a median RGB hex color from a region."""
+        x0, y0, x1, y1 = [int(v) for v in bbox]
+        x0 = max(0, min(image.width - 1, x0))
+        y0 = max(0, min(image.height - 1, y0))
+        x1 = max(x0 + 1, min(image.width, x1))
+        y1 = max(y0 + 1, min(image.height, y1))
+        crop = image.crop((x0, y0, x1, y1)).convert('RGB')
+        if crop.width > 80 or crop.height > 80:
+            crop.thumbnail((80, 80))
+        pixels = list(crop.getdata())
+        if not pixels:
+            return '#111827'
+        rgb = tuple(sorted(pixel[c] for pixel in pixels)[len(pixels) // 2] for c in range(3))
+        return f"#{rgb[0]:02X}{rgb[1]:02X}{rgb[2]:02X}"
+
+    @staticmethod
+    def _build_heuristic_slide_structure(editable_img) -> Optional['SlideStructure']:
+        """
+        Build editable carrier shapes without a Vision model.
+
+        This is intentionally conservative: it uses the text bboxes already found
+        by OCR/layout extraction and creates editable rounded cards/panels under
+        those text groups, then the background stripping step removes the baked
+        card regions from the screenshot.
+        """
+        text_elements = ExportService._collect_text_elements_for_batch_extraction(editable_img.elements)
+        if not text_elements:
+            return None
+
+        bg_path = (
+            editable_img.clean_background
+            if editable_img.clean_background and os.path.exists(editable_img.clean_background)
+            else editable_img.image_path
+        )
+
+        try:
+            bg = Image.open(bg_path).convert('RGB')
+        except Exception:
+            return None
+
+        width, height = editable_img.width, editable_img.height
+        structure = SlideStructure(background_type='image')
+
+        def expand_bbox(bbox, pad_x, pad_y):
+            return [
+                max(0, int(bbox[0] - pad_x)),
+                max(0, int(bbox[1] - pad_y)),
+                min(width, int(bbox[2] + pad_x)),
+                min(height, int(bbox[3] + pad_y)),
+            ]
+
+        # Cluster nearby text lines into carrier blocks when they are close.
+        items = sorted(text_elements, key=lambda item: (item['bbox'][1], item['bbox'][0]))
+        clusters = []
+        for item in items:
+            bbox = item['bbox']
+            placed = False
+            for cluster in clusters:
+                cb = cluster['bbox']
+                vertical_gap = max(0, max(bbox[1], cb[1]) - min(bbox[3], cb[3]))
+                horizontal_overlap = min(bbox[2], cb[2]) - max(bbox[0], cb[0])
+                nearby_x = abs(((bbox[0] + bbox[2]) / 2) - ((cb[0] + cb[2]) / 2)) < width * 0.18
+                if vertical_gap < height * 0.055 and (horizontal_overlap > 0 or nearby_x):
+                    cluster['items'].append(item)
+                    cluster['bbox'] = [
+                        min(cb[0], bbox[0]),
+                        min(cb[1], bbox[1]),
+                        max(cb[2], bbox[2]),
+                        max(cb[3], bbox[3]),
+                    ]
+                    placed = True
+                    break
+            if not placed:
+                clusters.append({'items': [item], 'bbox': list(bbox)})
+
+        # Always add per-cluster carrier shapes. Large title panels get wider
+        # padding; compact labels get card-like padding.
+        seen = set()
+        for cluster in clusters:
+            bbox = cluster['bbox']
+            bw = bbox[2] - bbox[0]
+            bh = bbox[3] - bbox[1]
+            pad_x = max(24, min(100, bw * 0.16))
+            pad_y = max(14, min(60, bh * 0.55))
+            if bw > width * 0.32 or bh > height * 0.09:
+                pad_x = max(pad_x, 56)
+                pad_y = max(pad_y, 28)
+            expanded = expand_bbox(bbox, pad_x, pad_y)
+
+            area_ratio = ((expanded[2] - expanded[0]) * (expanded[3] - expanded[1])) / max(1, width * height)
+            if area_ratio > 0.8:
+                continue
+            key = tuple(int(v / 8) for v in expanded)
+            if key in seen:
+                continue
+            seen.add(key)
+
+            fill_color = ExportService._sample_region_color(bg, expanded)
+            structure.shapes.append({
+                'shape_type': 'rounded_rect',
+                'bbox': expanded,
+                'fill_color': fill_color,
+                'corner_radius': 0.16,
+                'transparency': 0.0,
+                'border_color': '#FFFFFF',
+                'border_width_px': 1.0,
+                'shadow': {'blur_pt': 6, 'offset_y_pt': 2, 'color': '#000000', 'opacity': 0.20},
+                'source': 'heuristic_text_carrier',
+            })
+
+        logger.info(f"启发式结构兜底: 生成 {len(structure.shapes)} 个文本承载形状")
+        return structure if structure.shapes else None
+
+    @staticmethod
+    def _estimate_text_color_from_image(
+        image_path: str,
+        bbox: List[int],
+    ) -> Optional[Tuple[Tuple[int, int, int], float]]:
+        """Estimate foreground text color from the original image crop."""
+        try:
+            with Image.open(image_path) as img:
+                img = img.convert('RGB')
+                x0, y0, x1, y1 = [int(v) for v in bbox]
+                x0 = max(0, min(img.width - 1, x0))
+                y0 = max(0, min(img.height - 1, y0))
+                x1 = max(x0 + 1, min(img.width, x1))
+                y1 = max(y0 + 1, min(img.height, y1))
+                crop = img.crop((x0, y0, x1, y1))
+                if crop.width > 240 or crop.height > 160:
+                    crop.thumbnail((240, 160))
+
+                pixels = list(crop.getdata())
+                if len(pixels) < 16:
+                    return None
+
+                border_pixels = []
+                width, height = crop.size
+                for x in range(width):
+                    border_pixels.append(crop.getpixel((x, 0)))
+                    border_pixels.append(crop.getpixel((x, height - 1)))
+                for y in range(height):
+                    border_pixels.append(crop.getpixel((0, y)))
+                    border_pixels.append(crop.getpixel((width - 1, y)))
+
+                def median_channel(items, channel):
+                    values = sorted(pixel[channel] for pixel in items)
+                    return values[len(values) // 2]
+
+                bg = tuple(median_channel(border_pixels, c) for c in range(3))
+
+                scored = []
+                for pixel in pixels:
+                    dist = sum((pixel[c] - bg[c]) ** 2 for c in range(3)) ** 0.5
+                    if dist >= 28:
+                        scored.append((dist, pixel))
+                if len(scored) < max(6, len(pixels) * 0.01):
+                    return None
+
+                scored.sort(reverse=True, key=lambda item: item[0])
+                foreground_pixels = [pixel for _, pixel in scored[:max(8, int(len(scored) * 0.35))]]
+                fg = tuple(median_channel(foreground_pixels, c) for c in range(3))
+                contrast = sum((fg[c] - bg[c]) ** 2 for c in range(3)) ** 0.5
+                confidence = min(1.0, contrast / 140.0)
+                if confidence < 0.25:
+                    return None
+                return fg, confidence
+        except Exception as e:
+            logger.debug(f"文本颜色像素兜底失败: {e}")
+            return None
+
+    @staticmethod
+    def _apply_pixel_text_color_fallback(
+        text_styles: Dict[str, Any],
+        element_context: Dict[str, Dict[str, Any]],
+    ) -> Dict[str, Any]:
+        """Patch missing/default text colors using pixel sampling from source slides."""
+        if not element_context:
+            return text_styles
+
+        from services.image_editability.text_attribute_extractors import TextStyleResult
+
+        patched = dict(text_styles or {})
+        patched_count = 0
+
+        for element_id, context in element_context.items():
+            estimated = ExportService._estimate_text_color_from_image(
+                context['image_path'],
+                context['bbox'],
+            )
+            if not estimated:
+                continue
+            sampled_rgb, confidence = estimated
+            sampled_brightness = sum(sampled_rgb) / 3
+
+            style = patched.get(element_id)
+            current_rgb = getattr(style, 'font_color_rgb', None) if style else None
+            current_is_default_black = current_rgb in (None, (0, 0, 0), [0, 0, 0])
+            should_patch = (
+                style is None
+                or current_is_default_black
+                or getattr(style, 'confidence', 0.0) <= 0.1
+            )
+            if not should_patch:
+                continue
+
+            if current_is_default_black and sampled_brightness < 45:
+                continue
+
+            if style is None:
+                patched[element_id] = TextStyleResult(
+                    font_color_rgb=sampled_rgb,
+                    confidence=confidence,
+                    metadata={'source': 'pixel_fallback'}
+                )
+            else:
+                style.font_color_rgb = sampled_rgb
+                if getattr(style, 'colored_segments', None):
+                    for segment in style.colored_segments:
+                        if getattr(segment, 'color_rgb', None) in (None, (0, 0, 0), [0, 0, 0]):
+                            segment.color_rgb = sampled_rgb
+                style.confidence = max(getattr(style, 'confidence', 0.0), confidence)
+                style.metadata = {
+                    **(getattr(style, 'metadata', {}) or {}),
+                    'color_source': 'pixel_fallback',
+                }
+            patched_count += 1
+
+        if patched_count:
+            logger.info(f"✓ 文本颜色像素兜底修正 {patched_count} 个元素")
+
+        return patched
 
     # NOTE: clean background生成功能已迁移到解耦的InpaintProvider实现
     # - DefaultInpaintProvider: 基于mask的精确区域重绘（Volcengine）
@@ -1205,6 +1626,7 @@ class ExportService:
         # Step 1: 收集所有文本元素
         all_text_items = []  # 用于单个裁剪识别 (element_id, image_path, content)
         page_text_elements = {}  # 用于全局识别 {page_idx: [text_elements]}
+        element_context = {}  # element_id -> {image_path, bbox}
         
         for page_idx, editable_img in enumerate(editable_images):
             # 收集用于单个裁剪识别的数据
@@ -1218,6 +1640,14 @@ class ExportService:
                     'image_path': editable_img.image_path,
                     'elements': batch_elements
                 }
+                for element in batch_elements:
+                    element_id = element.get('element_id')
+                    bbox = element.get('bbox')
+                    if element_id and bbox:
+                        element_context[element_id] = {
+                            'image_path': editable_img.image_path,
+                            'bbox': bbox,
+                        }
         
         if not all_text_items:
             return {}
@@ -1404,6 +1834,11 @@ class ExportService:
             elif global_style:
                 # 只有全局识别结果
                 merged_results[element_id] = global_style
+
+        merged_results = ExportService._apply_pixel_text_color_fallback(
+            merged_results,
+            element_context,
+        )
         
         logger.info(f"✓ 混合策略完成: 全局识别 {len(global_results)} 个, 单个识别 {len(local_results)} 个, 合并 {len(merged_results)} 个, 失败 {len(failed_extractions)} 个")
         
@@ -1524,16 +1959,24 @@ class ExportService:
                 
                 editable_images = results
         
-        # 2.7. [可选] 视觉结构分析 —— 每页一次 Vision 调用，识别背景色和卡片形状
-        # 通过 enable_visual_structure_analysis 开关控制，默认关闭，失败自动降级
+        # 2.5 & 2.7. 并行执行：文本样式提取 + 视觉结构分析（两者完全独立，同时启动）
         slide_structures: List[Optional[SlideStructure]] = [None] * len(editable_images)
-        if enable_visual_structure_analysis:
-            report_progress("结构分析", f"开始视觉结构分析（{len(editable_images)} 页）...", 40)
+        text_styles_cache = {}
+
+        from concurrent.futures import ThreadPoolExecutor as _TPool, Future as _Future
+        import threading as _threading
+
+        # --- 视觉结构分析任务（每页并行）---
+        def _run_visual_structure_analysis():
+            """并行分析所有页面的视觉结构，结果写入 slide_structures。"""
+            if not enable_visual_structure_analysis:
+                return
             try:
                 from services.ai_service import get_ai_service
                 _vis_ai = get_ai_service()
-                for _idx, _eimg in enumerate(editable_images):
-                    # 复用批量全图识别的数据结构（包含 element_id / text / bbox）
+                _results: List[Optional[SlideStructure]] = [None] * len(editable_images)
+
+                def _analyze_one(_idx, _eimg):
                     _batch_elements = ExportService._collect_text_elements_for_batch_extraction(_eimg.elements)
                     _text_elems = [
                         {
@@ -1543,55 +1986,104 @@ class ExportService:
                         }
                         for e in _batch_elements
                     ]
-                    slide_structures[_idx] = ExportService._analyze_slide_visual_structure(
+                    return _idx, ExportService._analyze_slide_visual_structure(
                         image_path=_eimg.image_path,
                         text_elements=_text_elems,
                         ai_service=_vis_ai,
                         image_width=_eimg.width,
                         image_height=_eimg.height,
                     )
-                    _pct = 40 + int(5 * (_idx + 1) / len(editable_images))
-                    report_progress(
-                        "结构分析",
-                        f"✓ 第 {_idx + 1}/{len(editable_images)} 页结构分析完成",
-                        _pct,
-                    )
+
+                with _TPool(max_workers=max_workers) as _ex:
+                    _futs = {_ex.submit(_analyze_one, i, e): i for i, e in enumerate(editable_images)}
+                    from concurrent.futures import as_completed as _ac
+                    for _f in _ac(_futs):
+                        try:
+                            _i, _s = _f.result()
+                            _results[_i] = _s
+                        except Exception as _fe:
+                            logger.warning(f"视觉结构分析单页失败（已跳过）: {_fe}")
+
+                # 写回共享列表
+                for _i, _s in enumerate(_results):
+                    slide_structures[_i] = _s
+                logger.info(f"视觉结构分析完成: {sum(1 for s in slide_structures if s is not None)}/{len(slide_structures)} 页成功")
             except Exception as _e:
                 logger.warning(f"视觉结构分析阶段出错，已跳过: {_e}")
-                slide_structures = [None] * len(editable_images)
 
-        # 2.5. 使用混合策略提取所有文本元素的样式（如果提供了提取器）
-        # 混合策略：全局识别（粗体/斜体/下划线/对齐）+ 单个裁剪识别（颜色）
-        text_styles_cache = {}
-        if text_attribute_extractor:
-            report_progress("样式提取", "开始提取文本样式（混合策略）...", 45)
-            
-            # 统计文本元素数量
+        # --- 文本样式提取任务 ---
+        def _run_text_style_extraction():
+            """提取所有文本样式，结果写入 text_styles_cache。"""
+            nonlocal text_styles_cache
+            if not text_attribute_extractor:
+                element_context = {}
+                for editable_img in editable_images:
+                    for element in ExportService._collect_text_elements_for_batch_extraction(editable_img.elements):
+                        element_id = element.get('element_id')
+                        bbox = element.get('bbox')
+                        if element_id and bbox:
+                            element_context[element_id] = {
+                                'image_path': editable_img.image_path,
+                                'bbox': bbox,
+                            }
+                text_styles_cache = ExportService._apply_pixel_text_color_fallback({}, element_context)
+                return
             total_text_count = sum(
                 len(ExportService._collect_text_elements_for_extraction(img.elements))
                 for img in editable_images
             )
-            
-            if total_text_count > 0:
-                report_progress("样式提取", f"混合策略分析 {total_text_count} 个文本元素...", 50)
-                text_styles_cache, failed_extractions = ExportService._batch_extract_text_styles_hybrid(
+            if total_text_count == 0:
+                return
+            try:
+                _cache, _failed = ExportService._batch_extract_text_styles_hybrid(
                     editable_images=editable_images,
                     text_attribute_extractor=text_attribute_extractor,
                     max_workers=max_workers * 2,
-                    fail_fast=fail_fast
+                    fail_fast=fail_fast,
                 )
-                
-                # 记录样式提取失败的元素（详细）
-                for element_id, reason in failed_extractions:
-                    warnings.add_style_extraction_failed(element_id, reason)
-                
-                # 记录汇总信息
-                extracted_count = len(text_styles_cache)
-                failed_count = len(failed_extractions)
-                if failed_count > 0:
-                    logger.warning(f"样式提取: {failed_count}/{total_text_count} 个元素失败")
-                
-                report_progress("样式提取", f"✓ 完成 {extracted_count}/{total_text_count} 个文本样式提取（{failed_count} 个失败）", 70)
+            except ExportError as e:
+                logger.warning(f"样式提取失败，改用像素颜色兜底: {e}")
+                warnings.add_warning(f"文本样式模型不可用，已改用像素颜色兜底: {e.message}")
+                text_styles_cache = _apply_text_color_only_fallback()
+                return
+            text_styles_cache = _cache
+            for element_id, reason in _failed:
+                warnings.add_style_extraction_failed(element_id, reason)
+            if _failed:
+                logger.warning(f"样式提取: {len(_failed)}/{total_text_count} 个元素失败")
+            logger.info(f"样式提取完成: {len(_cache)}/{total_text_count} 个文本元素")
+        
+        def _apply_text_color_only_fallback():
+            element_context = {}
+            for editable_img in editable_images:
+                for element in ExportService._collect_text_elements_for_batch_extraction(editable_img.elements):
+                    element_id = element.get('element_id')
+                    bbox = element.get('bbox')
+                    if element_id and bbox:
+                        element_context[element_id] = {
+                            'image_path': editable_img.image_path,
+                            'bbox': bbox,
+                        }
+            return ExportService._apply_pixel_text_color_fallback({}, element_context)
+
+        # 同时启动两个任务线程
+        report_progress("并行分析", f"同步执行文本样式提取与视觉结构分析（{total_pages} 页）...", 40)
+        _t_vis = _threading.Thread(target=_run_visual_structure_analysis, daemon=True)
+        _t_txt = _threading.Thread(target=_run_text_style_extraction, daemon=True)
+        _t_vis.start()
+        _t_txt.start()
+        _t_vis.join()
+        _t_txt.join()
+        if not text_styles_cache:
+            text_styles_cache = _apply_text_color_only_fallback()
+
+        for _idx, _eimg in enumerate(editable_images):
+            if slide_structures[_idx] is None or (
+                not slide_structures[_idx].shapes
+                and not slide_structures[_idx].image_layers
+            ):
+                slide_structures[_idx] = ExportService._build_heuristic_slide_structure(_eimg)
+        report_progress("并行分析", "✓ 文本样式提取与视觉结构分析均已完成", 70)
         
         report_progress("构建PPTX", "开始构建可编辑PPTX文件...", 75)
         
@@ -1611,25 +2103,39 @@ class ExportService:
             # 创建空白幻灯片
             slide = builder.add_blank_slide()
             
-            # 添加背景图（参考原实现，使用slide.shapes.add_picture）
-            if editable_img.clean_background and os.path.exists(editable_img.clean_background):
-                logger.info(f"    添加clean background: {editable_img.clean_background}")
-                try:
-                    slide.shapes.add_picture(
-                        editable_img.clean_background,
-                        left=0,
-                        top=0,
-                        width=builder.prs.slide_width,
-                        height=builder.prs.slide_height
-                    )
-                except Exception as e:
-                    logger.error(f"Failed to add background: {e}")
+            # 获取本页视觉结构（在背景处理前就需要知道背景类型）
+            _structure = slide_structures[page_idx] if slide_structures else None
+
+            # 添加背景：纯色背景用矢量色底，其他情况用截图
+            _use_solid_bg = (
+                _structure is not None
+                and _structure.background_type == 'solid'
+                and _structure.background_color
+            )
+            if _use_solid_bg:
+                logger.info(f"    使用纯色矢量背景: {_structure.background_color}")
+                builder.set_slide_background_color(slide, _structure.background_color)
             else:
-                # 回退到原图
-                logger.info(f"    使用原图作为背景: {editable_img.image_path}")
+                raw_bg_path = (
+                    editable_img.clean_background
+                    if editable_img.clean_background and os.path.exists(editable_img.clean_background)
+                    else editable_img.image_path
+                )
+                visual_output_dir = Path(raw_bg_path).parent / 'visual_layers'
+                bg_path = (
+                    ExportService._build_visual_background_without_layers(
+                        raw_bg_path,
+                        _structure,
+                        visual_output_dir,
+                        page_idx,
+                    )
+                    if _structure is not None
+                    else None
+                ) or raw_bg_path
+                logger.info(f"    添加背景图: {bg_path}")
                 try:
                     slide.shapes.add_picture(
-                        editable_img.image_path,
+                        bg_path,
                         left=0,
                         top=0,
                         width=builder.prs.slide_width,
@@ -1639,7 +2145,6 @@ class ExportService:
                     logger.error(f"Failed to add background: {e}")
 
             # 插入 Vision 识别出的矢量形状（卡片背景等）
-            _structure = slide_structures[page_idx] if slide_structures else None
             if _structure and _structure.shapes:
                 logger.info(f"    添加 {len(_structure.shapes)} 个视觉结构形状")
                 for _spec in _structure.shapes:
@@ -1651,6 +2156,26 @@ class ExportService:
                         )
                     except Exception as _e:
                         logger.warning(f"    形状渲染失败（已跳过）: {_e}")
+
+            # 插入 Vision 识别出的复杂图片层（图标、徽章、3D 插画等）
+            if _structure and _structure.image_layers:
+                visual_output_dir = Path(editable_img.image_path).parent / 'visual_layers'
+                materialized_layers = ExportService._crop_visual_image_layers(
+                    editable_img.image_path,
+                    _structure.image_layers,
+                    visual_output_dir,
+                    page_idx,
+                )
+                logger.info(f"    添加 {len(materialized_layers)} 个视觉图片层")
+                for _layer in materialized_layers:
+                    try:
+                        builder.add_image_element(
+                            slide=slide,
+                            image_path=_layer['image_path'],
+                            bbox=_layer['bbox'],
+                        )
+                    except Exception as _e:
+                        logger.warning(f"    视觉图片层渲染失败（已跳过）: {_e}")
 
             # 添加所有元素（递归地）
             # 计算缩放比例：将原始图片坐标映射到统一的幻灯片坐标
@@ -1791,6 +2316,22 @@ class ExportService:
                 align=align,
                 text_style=text_style
             )
+
+        rendered_image_regions = []
+
+        def overlap_ratio(a, b):
+            ix0 = max(a[0], b[0])
+            iy0 = max(a[1], b[1])
+            ix1 = min(a[2], b[2])
+            iy1 = min(a[3], b[3])
+            if ix1 <= ix0 or iy1 <= iy0:
+                return 0.0
+            inter = (ix1 - ix0) * (iy1 - iy0)
+            area = max(1, min(
+                (a[2] - a[0]) * (a[3] - a[1]),
+                (b[2] - b[0]) * (b[3] - b[1])
+            ))
+            return inter / area
         
         for elem in elements:
             elem_type = elem.element_type
@@ -1906,7 +2447,12 @@ class ExportService:
                         logger.warning(f"Table image not found: {elem.image_path}")
                         builder.add_image_placeholder(slide, bbox_list)
             
-            elif elem_type in ['image', 'figure', 'chart']:
+            elif elem_type in ['image', 'figure', 'chart', 'image_body', 'image_footnote', 'icon', 'logo', 'illustration']:
+                if any(overlap_ratio(bbox_list, existing) > 0.82 for existing in rendered_image_regions):
+                    logger.debug(f"{'  ' * depth}    跳过高度重叠图片元素: {elem.element_id}")
+                    continue
+                rendered_image_regions.append(bbox_list)
+
                 # 检查是否应该使用递归渲染
                 should_use_recursive_render = False
                 

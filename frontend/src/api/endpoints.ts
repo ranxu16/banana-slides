@@ -1,4 +1,4 @@
-import { apiClient } from './client';
+import { apiClient, getAuthHeaders } from './client';
 import type { Project, Task, ApiResponse, CreateProjectRequest, Page, Material } from '@/types';
 import type { Settings } from '../types/index';
 
@@ -155,13 +155,12 @@ export const generateOutlineStream = async (
   lockPageCount?: boolean,
 ): Promise<void> => {
   const lang = language || await getStoredOutputLanguage();
-  const accessCode = localStorage.getItem('banana-access-code');
 
   const response = await fetch(`/api/projects/${projectId}/generate/outline/stream`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      ...(accessCode ? { 'X-Access-Code': accessCode } : {}),
+      ...getAuthHeaders(),
     },
     body: JSON.stringify({ language: lang, lock_page_count: lockPageCount }),
   });
@@ -268,13 +267,12 @@ export const generateDescriptionsStream = async (
   detailLevel?: string,
 ): Promise<void> => {
   const lang = language || await getStoredOutputLanguage();
-  const accessCode = localStorage.getItem('banana-access-code');
 
   const response = await fetch(`/api/projects/${projectId}/generate/descriptions/stream`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      ...(accessCode ? { 'X-Access-Code': accessCode } : {}),
+      ...getAuthHeaders(),
     },
     body: JSON.stringify({ language: lang, detail_level: detailLevel || 'default' }),
   });
@@ -736,13 +734,15 @@ export const exportImages = async (
 export const exportEditablePPTX = async (
   projectId: string,
   filename?: string,
-  pageIds?: string[]
+  pageIds?: string[],
+  options?: { enableVisualStructureAnalysis?: boolean }
 ): Promise<ApiResponse<{ task_id: string }>> => {
   const response = await apiClient.post<
     ApiResponse<{ task_id: string }>
   >(`/api/projects/${projectId}/export/editable-pptx`, {
     filename,
-    page_ids: pageIds
+    page_ids: pageIds,
+    enable_visual_structure_analysis: options?.enableVisualStructureAnalysis
   });
   return response.data;
 };

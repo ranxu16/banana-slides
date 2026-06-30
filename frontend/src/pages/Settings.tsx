@@ -305,7 +305,7 @@ const settingsI18n = {
     }
   }
 };
-import { Button, Input, Card, Loading, Modal, useToast, useConfirm } from '@/components/shared';
+import { Button, Input, Card, Loading, Modal, useToast, ToastContainer, useConfirm } from '@/components/shared';
 import * as api from '@/api/endpoints';
 import type { OutputLanguage, UpdateCheckInfo } from '@/api/endpoints';
 import { OUTPUT_LANGUAGE_OPTIONS } from '@/api/endpoints';
@@ -612,7 +612,7 @@ const formDataFromSettings = (data: SettingsType): typeof initialFormData => ({
 // Settings 组件 - 纯嵌入模式（可复用）
 export const Settings: React.FC = () => {
   const t = useT(settingsI18n);
-  const { show, ToastContainer } = useToast();
+  const { show, toasts: settingsToasts, remove: settingsRemove } = useToast();
   const { confirm, ConfirmDialog } = useConfirm();
 
   const copyToClipboard = (text: string) => {
@@ -1431,7 +1431,7 @@ export const Settings: React.FC = () => {
 
   return (
     <>
-      <ToastContainer />
+      <ToastContainer toasts={settingsToasts} onRemove={settingsRemove} />
       {ConfirmDialog}
       <div className="space-y-8">
         {/* 默认 API 配置区块 */}

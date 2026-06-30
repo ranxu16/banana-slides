@@ -28,9 +28,11 @@ class Project(db.Model):
     export_inpaint_method = db.Column(db.String(50), nullable=True, default='hybrid')  # 背景图获取方法: generative, baidu, hybrid
     export_allow_partial = db.Column(db.Boolean, nullable=True, default=False)  # 是否允许返回半成品（导出出错时继续而非停止）
     enable_icon_subject_extraction = db.Column(db.Boolean, nullable=True, default=True)  # 是否对小尺寸图标走百度智能抠图
-    enable_visual_structure_analysis = db.Column(db.Boolean, nullable=True, default=False)  # 是否启用 Vision 视觉结构分析（Beta）
+    enable_visual_structure_analysis = db.Column(db.Boolean, nullable=True, default=True)  # 是否启用 Vision 视觉结构分析（Beta）
     image_aspect_ratio = db.Column(db.String(10), nullable=False, server_default='16:9', default='16:9')
     status = db.Column(db.String(50), nullable=False, default='DRAFT')
+    # 归属用户（NULL = 历史数据，归属管理员）
+    user_id = db.Column(db.String(36), db.ForeignKey('users.id', ondelete='SET NULL'), nullable=True)
     created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
     
@@ -42,6 +44,7 @@ class Project(db.Model):
                            cascade='all, delete-orphan')
     materials = db.relationship('Material', back_populates='project', lazy='select',
                            cascade='all, delete-orphan')
+    owner = db.relationship('User', back_populates='projects', foreign_keys=[user_id])
     
     def to_dict(self, include_pages=False):
         """Convert to dictionary"""
@@ -70,7 +73,7 @@ class Project(db.Model):
             'export_inpaint_method': self.export_inpaint_method or 'hybrid',
             'export_allow_partial': self.export_allow_partial or False,
             'enable_icon_subject_extraction': True if self.enable_icon_subject_extraction is None else bool(self.enable_icon_subject_extraction),
-            'enable_visual_structure_analysis': False if self.enable_visual_structure_analysis is None else bool(self.enable_visual_structure_analysis),
+            'enable_visual_structure_analysis': True if self.enable_visual_structure_analysis is None else bool(self.enable_visual_structure_analysis),
             'image_aspect_ratio': self.image_aspect_ratio,
             'status': self.status,
             'created_at': created_at_str,

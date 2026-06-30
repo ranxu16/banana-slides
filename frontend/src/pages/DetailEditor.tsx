@@ -121,7 +121,7 @@ const detailI18n = {
     }
   }
 };
-import { Button, Loading, useToast, useConfirm, AiRefineInput, FilePreviewModal, ReferenceFileList, MaterialSelector, ImportMarkdownModal } from '@/components/shared';
+import { Button, Loading, useToast, ToastContainer, useConfirm, AiRefineInput, FilePreviewModal, ReferenceFileList, MaterialSelector, ImportMarkdownModal } from '@/components/shared';
 import { DescriptionCard } from '@/components/preview/DescriptionCard';
 import { useProjectStore } from '@/store/useProjectStore';
 import { refineDescriptions, getTaskStatus, addPage, updateProject, getSettings, updateSettings } from '@/api/endpoints';
@@ -213,7 +213,7 @@ export const DetailEditor: React.FC = () => {
     generatePageDescription,
     regenerateRenovationPage,
   } = useProjectStore();
-  const { show, ToastContainer } = useToast();
+  const { show, toasts: editorToasts, remove: editorRemove } = useToast();
   const { confirm, ConfirmDialog } = useConfirm();
   const [isAiRefining, setIsAiRefining] = React.useState(false);
   const [previewFileId, setPreviewFileId] = useState<string | null>(null);
@@ -998,7 +998,7 @@ export const DetailEditor: React.FC = () => {
           )}
         </div>
       </main>
-      <ToastContainer />
+      <ToastContainer toasts={editorToasts} onRemove={editorRemove} />
       {ConfirmDialog}
       <FilePreviewModal fileId={previewFileId} onClose={() => setPreviewFileId(null)} />
       <ImportMarkdownModal

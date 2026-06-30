@@ -22,6 +22,7 @@ from flask import Blueprint, current_app, request
 
 from models import db, Settings
 from utils import success_response, error_response
+from utils.auth import require_admin
 
 logger = logging.getLogger(__name__)
 
@@ -85,6 +86,7 @@ def _parse_expires_in(value) -> int:
 
 
 @openai_oauth_bp.route("/authorize", methods=["GET"])
+@require_admin
 def authorize():
     """Generate PKCE params, start callback server, return authorization URL."""
     code_verifier = secrets.token_urlsafe(64)
@@ -120,6 +122,7 @@ def authorize():
 
 
 @openai_oauth_bp.route("/disconnect", methods=["POST"])
+@require_admin
 def disconnect():
     """Clear stored OAuth tokens."""
     settings = Settings.get_settings()
@@ -130,6 +133,7 @@ def disconnect():
 
 
 @openai_oauth_bp.route("/status", methods=["GET"])
+@require_admin
 def status():
     """Return current OAuth connection status."""
     settings = Settings.get_settings()
@@ -141,6 +145,7 @@ def status():
 
 
 @openai_oauth_bp.route("/models", methods=["GET"])
+@require_admin
 def list_models():
     """Return available models for Codex OAuth users, split by type."""
     settings = Settings.get_settings()
@@ -183,6 +188,7 @@ def list_models():
 
 
 @openai_oauth_bp.route("/manual-callback", methods=["POST"])
+@require_admin
 def manual_callback():
     """Accept a pasted callback URL and complete the token exchange.
 

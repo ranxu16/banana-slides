@@ -5,6 +5,7 @@ import logging
 from flask import Blueprint, request, current_app
 from models import db, Project, UserTemplate, UserStyleTemplate
 from utils import success_response, error_response, not_found, bad_request, allowed_file
+from utils.auth import require_auth, get_project_or_404
 from services import FileService
 from datetime import datetime
 
@@ -16,6 +17,7 @@ user_style_template_bp = Blueprint('user_style_templates', __name__, url_prefix=
 
 
 @template_bp.route('/<project_id>/template', methods=['POST'])
+@require_auth
 def upload_template(project_id):
     """
     POST /api/projects/{project_id}/template - Upload template image
@@ -24,10 +26,9 @@ def upload_template(project_id):
     Form: template_image=@file.png
     """
     try:
-        project = Project.query.get(project_id)
-        
-        if not project:
-            return not_found('Project')
+        project, err = get_project_or_404(project_id)
+        if err:
+            return err
         
         # Check if file is in request
         if 'template_image' not in request.files:
@@ -65,15 +66,15 @@ def upload_template(project_id):
 
 
 @template_bp.route('/<project_id>/template', methods=['DELETE'])
+@require_auth
 def delete_template(project_id):
     """
     DELETE /api/projects/{project_id}/template - Delete template
     """
     try:
-        project = Project.query.get(project_id)
-        
-        if not project:
-            return not_found('Project')
+        project, err = get_project_or_404(project_id)
+        if err:
+            return err
         
         if not project.template_image_path:
             return bad_request("No template to delete")
@@ -96,6 +97,7 @@ def delete_template(project_id):
 
 
 @template_bp.route('/templates', methods=['GET'])
+@require_auth
 def get_system_templates():
     """
     GET /api/templates - Get system preset templates
@@ -113,6 +115,7 @@ def get_system_templates():
 # ========== User Template Endpoints ==========
 
 @user_template_bp.route('', methods=['POST'])
+@require_auth
 def upload_user_template():
     """
     POST /api/user-templates - Upload user template image
@@ -183,6 +186,7 @@ def upload_user_template():
 
 
 @user_template_bp.route('', methods=['GET'])
+@require_auth
 def list_user_templates():
     """
     GET /api/user-templates - Get list of user templates
@@ -199,6 +203,7 @@ def list_user_templates():
 
 
 @user_template_bp.route('/<template_id>', methods=['DELETE'])
+@require_auth
 def delete_user_template(template_id):
     """
     DELETE /api/user-templates/{template_id} - Delete user template
@@ -227,6 +232,7 @@ def delete_user_template(template_id):
 # ========== User Style Template Endpoints ==========
 
 @user_style_template_bp.route('', methods=['POST'])
+@require_auth
 def create_user_style_template():
     try:
         data = request.get_json()
@@ -254,6 +260,7 @@ def create_user_style_template():
 
 
 @user_style_template_bp.route('', methods=['GET'])
+@require_auth
 def list_user_style_templates():
     try:
         templates = UserStyleTemplate.query.order_by(UserStyleTemplate.created_at.desc()).all()
@@ -265,6 +272,7 @@ def list_user_style_templates():
 
 
 @user_style_template_bp.route('/<template_id>', methods=['DELETE'])
+@require_auth
 def delete_user_style_template(template_id):
     try:
         template = UserStyleTemplate.query.get(template_id)

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Button, useToast, MaterialSelector } from '@/components/shared';
+import { Button, useToast, ToastContainer, MaterialSelector } from '@/components/shared';
 import { useT } from '@/hooks/useT';
 import { getImageUrl } from '@/api/client';
 
@@ -62,7 +62,7 @@ export const TemplateSelector: React.FC<TemplateSelectorProps> = ({
   const [isMaterialSelectorOpen, setIsMaterialSelectorOpen] = useState(false);
   const [deletingTemplateId, setDeletingTemplateId] = useState<string | null>(null);
   const [saveToLibrary, setSaveToLibrary] = useState(true);
-  const { show, ToastContainer } = useToast();
+  const { show, toasts: tmplToasts, remove: tmplRemove } = useToast();
 
   const presetTemplates = [
     { id: '1', nameKey: 'template.presets.retroScroll', preview: '/templates/template_y.png', thumb: '/templates/template_y-thumb.webp' },
@@ -296,7 +296,7 @@ export const TemplateSelector: React.FC<TemplateSelectorProps> = ({
           </div>
         )}
       </div>
-      <ToastContainer />
+      <ToastContainer toasts={tmplToasts} onRemove={tmplRemove} />
       {projectId && (
         <MaterialSelector
           projectId={projectId}

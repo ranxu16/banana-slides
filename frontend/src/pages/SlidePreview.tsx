@@ -272,7 +272,7 @@ import {
   Loader2,
   Info,
 } from 'lucide-react';
-import { Button, Loading, Modal, Textarea, useToast, useConfirm, MaterialSelector, ProjectSettingsModal, ExportTasksPanel, TextStyleSelector } from '@/components/shared';
+import { Button, Loading, Modal, Textarea, useToast, ToastContainer, useConfirm, MaterialSelector, ProjectSettingsModal, ExportTasksPanel, TextStyleSelector } from '@/components/shared';
 import { MaterialGeneratorModal } from '@/components/shared/MaterialGeneratorModal';
 import { TemplateSelector, getTemplateFile } from '@/components/shared/TemplateSelector';
 import { listUserTemplates, type UserTemplate } from '@/api/endpoints';
@@ -467,7 +467,7 @@ export const SlidePreview: React.FC = () => {
     currentProject?.enable_icon_subject_extraction ?? true
   );
   const [enableVisualStructureAnalysis, setEnableVisualStructureAnalysis] = useState<boolean>(
-    currentProject?.enable_visual_structure_analysis ?? false
+    currentProject?.enable_visual_structure_analysis ?? true
   );
   const [isSavingExportSettings, setIsSavingExportSettings] = useState(false);
   // 画面比例
@@ -505,7 +505,7 @@ export const SlidePreview: React.FC = () => {
   const [isSelectingRegion, setIsSelectingRegion] = useState(false);
   const [selectionStart, setSelectionStart] = useState<{ x: number; y: number } | null>(null);
   const [selectionRect, setSelectionRect] = useState<{ left: number; top: number; width: number; height: number } | null>(null);
-  const { show, ToastContainer } = useToast();
+  const { show, toasts, remove } = useToast();
   const { confirm, ConfirmDialog } = useConfirm();
 
 
@@ -581,7 +581,7 @@ export const SlidePreview: React.FC = () => {
         setExportInpaintMethod((currentProject.export_inpaint_method as ExportInpaintMethod) || 'hybrid');
         setExportAllowPartial(currentProject.export_allow_partial || false);
         setEnableIconSubjectExtraction(currentProject.enable_icon_subject_extraction ?? true);
-        setEnableVisualStructureAnalysis(currentProject.enable_visual_structure_analysis ?? false);
+        setEnableVisualStructureAnalysis(currentProject.enable_visual_structure_analysis ?? true);
         setAspectRatio(currentProject.image_aspect_ratio || '16:9');
         lastProjectId.current = currentProject.id || null;
         isEditingRequirements.current = false;
@@ -600,7 +600,7 @@ export const SlidePreview: React.FC = () => {
         setExportInpaintMethod((currentProject.export_inpaint_method as ExportInpaintMethod) || 'hybrid');
         setExportAllowPartial(currentProject.export_allow_partial || false);
         setEnableIconSubjectExtraction(currentProject.enable_icon_subject_extraction ?? true);
-        setEnableVisualStructureAnalysis(currentProject.enable_visual_structure_analysis ?? false);
+        setEnableVisualStructureAnalysis(currentProject.enable_visual_structure_analysis ?? true);
       }
       // 如果用户正在编辑，则不更新本地状态
     }
@@ -1243,7 +1243,9 @@ export const SlidePreview: React.FC = () => {
         
         show({ message: t('slidePreview.exportStarted'), type: 'success' });
         
-        const response = await apiExportEditablePPTX(projectId, undefined, pageIds);
+        const response = await apiExportEditablePPTX(projectId, undefined, pageIds, {
+          enableVisualStructureAnalysis,
+        });
         const taskId = response.data?.task_id;
         
         if (taskId) {
@@ -2815,7 +2817,7 @@ export const SlidePreview: React.FC = () => {
           </div>
         </div>
       </Modal>
-      <ToastContainer />
+      <ToastContainer toasts={toasts} onRemove={remove} />
       {ConfirmDialog}
       
       {/* 模板选择 Modal */}

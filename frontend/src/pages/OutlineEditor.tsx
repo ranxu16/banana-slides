@@ -112,7 +112,7 @@ import {
   useSortable,
 } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
-import { Button, Loading, useConfirm, useToast, AiRefineInput, FilePreviewModal, ReferenceFileList, MaterialSelector, ImportMarkdownModal } from '@/components/shared';
+import { Button, Loading, useConfirm, useToast, ToastContainer, AiRefineInput, FilePreviewModal, ReferenceFileList, MaterialSelector, ImportMarkdownModal } from '@/components/shared';
 import { MarkdownTextarea, type MarkdownTextareaRef } from '@/components/shared/MarkdownTextarea';
 import { OutlineCard } from '@/components/outline/OutlineCard';
 import { useProjectStore } from '@/store/useProjectStore';
@@ -192,7 +192,7 @@ export const OutlineEditor: React.FC = () => {
     }
   }, [isOutlineStreaming]);
   const { confirm, ConfirmDialog } = useConfirm();
-  const { show, ToastContainer } = useToast();
+  const { show, toasts, remove } = useToast();
   const autoGenerateStartedRef = useRef<string | null>(null);
 
   // 左侧可编辑文本区域 — desktop and mobile use separate refs to avoid
@@ -869,7 +869,7 @@ export const OutlineEditor: React.FC = () => {
         </div>
       </main>
       {ConfirmDialog}
-      <ToastContainer />
+      <ToastContainer toasts={toasts} onRemove={remove} />
       <FilePreviewModal fileId={previewFileId} onClose={() => setPreviewFileId(null)} />
       <ImportMarkdownModal
         isOpen={isImportModalOpen}

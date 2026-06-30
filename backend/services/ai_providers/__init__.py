@@ -277,10 +277,52 @@ def get_image_caption_provider_config() -> Dict[str, Any]:
     return _get_model_type_provider_config('image_caption')
 
 
+def _is_openai_vision_model_name(model: str) -> bool:
+    """Return True for ChatGPT/OpenAI-family models that can plausibly accept images."""
+    model_lower = (model or '').strip().lower()
+    if not model_lower:
+        return False
+    if model_lower.startswith(('gemini-', 'claude-', 'qwen', 'doubao', 'deepseek', 'glm', 'kimi', 'minimax')):
+        return False
+    if model_lower.startswith(('dall-e', 'gpt-image', 'imagen', 'seedream')):
+        return False
+    if model_lower.startswith('codex-mini'):
+        return False
+    return model_lower.startswith('gpt-')
+
+
+def resolve_caption_model_for_provider(model: str, provider_format: str) -> str:
+    """
+    Normalize image-caption model names for the selected provider.
+
+    Users often configure all model sources to OpenAI/Codex but leave the
+    historical default caption model as gemini-*. In that case the API key is
+    fine, but the model name is invalid for ChatGPT/OpenAI providers. Prefer the
+    configured TEXT_MODEL when it is a GPT-family multimodal-capable name.
+    """
+    fmt = (provider_format or '').lower()
+    if fmt not in {'openai', 'codex'}:
+        return model
+
+    if _is_openai_vision_model_name(model):
+        return model
+
+    text_model = _resolve_setting('TEXT_MODEL')
+    resolved = text_model if _is_openai_vision_model_name(text_model) else 'gpt-4o'
+    logger.info(
+        "Caption model %r is not compatible with %s provider; using %r instead",
+        model,
+        fmt,
+        resolved,
+    )
+    return resolved
+
+
 def get_caption_provider(model: str = "gemini-3-flash-preview") -> TextProvider:
     """Factory: return a TextProvider for image caption (multimodal) tasks."""
     config = _get_model_type_provider_config('image_caption')
     fmt = config['format']
+    model = resolve_caption_model_for_provider(model, fmt)
 
     if fmt == 'anthropic':
         logger.info("Caption provider: Anthropic, model=%s", model)

@@ -26,6 +26,8 @@ from controllers.material_controller import material_bp, material_global_bp
 from controllers.reference_file_controller import reference_file_bp
 from controllers.settings_controller import settings_bp
 from controllers.openai_oauth_controller import openai_oauth_bp
+from controllers.auth_controller import auth_bp
+from controllers.admin_controller import admin_bp
 from controllers import project_bp, page_bp, template_bp, user_template_bp, user_style_template_bp, export_bp, file_bp, style_bp
 
 
@@ -158,6 +160,8 @@ def create_app():
     app.register_blueprint(reference_file_bp, url_prefix='/api/reference-files')
     app.register_blueprint(settings_bp)
     app.register_blueprint(openai_oauth_bp)
+    app.register_blueprint(auth_bp)
+    app.register_blueprint(admin_bp)
     app.register_blueprint(style_bp)
 
     with app.app_context():
@@ -175,6 +179,11 @@ def create_app():
             return  # non-API routes (health, static, etc.)
         if request.path.startswith('/api/access-code/'):
             return  # allow check/verify endpoints
+        if request.path.startswith('/api/auth/'):
+            return  # auth endpoints bootstrap JWT login/registration
+        from utils.auth import authenticate_request
+        if authenticate_request() is not None:
+            return  # authenticated users do not need the legacy access code
         code = request.headers.get('X-Access-Code', '')
         if hmac.compare_digest(code, expected):
             return
@@ -318,16 +327,6 @@ def _load_settings_to_config(app):
             app.config['MINERU_TOKEN'] = settings.mineru_token
             logging.info("Loaded MINERU_TOKEN from settings")
         
-        # Load image caption model - fall back to text_model when not explicitly configured,
-        # so the caption provider uses a model compatible with the configured text provider.
-        caption_model = settings.image_caption_model or settings.text_model
-        if caption_model:
-            app.config['IMAGE_CAPTION_MODEL'] = caption_model
-            if settings.image_caption_model:
-                logging.info(f"Loaded IMAGE_CAPTION_MODEL from settings: {caption_model}")
-            else:
-                logging.info(f"IMAGE_CAPTION_MODEL not set, falling back to TEXT_MODEL: {caption_model}")
-        
         # Load output language
         if settings.output_language:
             app.config['OUTPUT_LANGUAGE'] = settings.output_language
@@ -359,6 +358,24 @@ def _load_settings_to_config(app):
             # Fall back to text model source so caption uses the same provider as text
             app.config['IMAGE_CAPTION_MODEL_SOURCE'] = settings.text_model_source
             logging.info(f"IMAGE_CAPTION_MODEL_SOURCE not set, falling back to TEXT_MODEL_SOURCE: {settings.text_model_source}")
+
+        # Load image caption model after source resolution so OpenAI/Codex setups do
+        # not accidentally keep historical Gemini model names.
+        caption_model = settings.image_caption_model or settings.text_model
+        if caption_model:
+            try:
+                from services.ai_providers import resolve_caption_model_for_provider
+                caption_model = resolve_caption_model_for_provider(
+                    caption_model,
+                    app.config.get('IMAGE_CAPTION_MODEL_SOURCE') or app.config.get('AI_PROVIDER_FORMAT')
+                )
+            except Exception as e:
+                logging.warning(f"Failed to normalize IMAGE_CAPTION_MODEL, using configured value: {e}")
+            app.config['IMAGE_CAPTION_MODEL'] = caption_model
+            if settings.image_caption_model:
+                logging.info(f"Loaded IMAGE_CAPTION_MODEL from settings: {caption_model}")
+            else:
+                logging.info(f"IMAGE_CAPTION_MODEL not set, falling back to TEXT_MODEL: {caption_model}")
 
         # Load per-model API credentials (for gemini/openai per-model overrides)
         for model_type in ('text', 'image', 'image_caption'):

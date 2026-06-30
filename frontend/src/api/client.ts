@@ -4,6 +4,35 @@ import axios from 'axios';
 // 生产环境：通过 nginx proxy 转发
 const API_BASE_URL = '';
 
+// 401 回调，由 useAuthStore 在 App 初始化时注册
+let _onUnauthorized: (() => void) | null = null;
+export function setUnauthorizedHandler(fn: () => void) {
+  _onUnauthorized = fn;
+}
+
+export function getAuthHeaders(): Record<string, string> {
+  const headers: Record<string, string> = {};
+  try {
+    const raw = localStorage.getItem('banana-auth');
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      const token = parsed?.state?.token;
+      if (token) {
+        headers.Authorization = `Bearer ${token}`;
+      }
+    }
+  } catch {
+    // ignore parse errors
+  }
+
+  const accessCode = localStorage.getItem('banana-access-code');
+  if (accessCode) {
+    headers['X-Access-Code'] = accessCode;
+  }
+
+  return headers;
+}
+
 // 创建 axios 实例
 export const apiClient = axios.create({
   baseURL: API_BASE_URL,
@@ -13,21 +42,20 @@ export const apiClient = axios.create({
 // 请求拦截器
 apiClient.interceptors.request.use(
   (config) => {
-    // Attach access code header for backend enforcement
-    const accessCode = localStorage.getItem('banana-access-code');
-    if (accessCode && config.headers) {
-      config.headers['X-Access-Code'] = accessCode;
+    // Attach JWT token and optional legacy access code.
+    if (config.headers) {
+      const authHeaders = getAuthHeaders();
+      Object.entries(authHeaders).forEach(([key, value]) => {
+        config.headers[key] = value;
+      });
     }
 
     // 如果请求体是 FormData，删除 Content-Type 让浏览器自动设置
-    // 浏览器会自动添加正确的 Content-Type 和 boundary
     if (config.data instanceof FormData) {
-      // 不设置 Content-Type，让浏览器自动处理
       if (config.headers) {
         delete config.headers['Content-Type'];
       }
     } else if (config.headers && !config.headers['Content-Type']) {
-      // 对于非 FormData 请求，默认设置为 JSON
       config.headers['Content-Type'] = 'application/json';
     }
 
@@ -44,15 +72,15 @@ apiClient.interceptors.response.use(
     return response;
   },
   (error) => {
-    // 统一错误处理
     if (error.response) {
-      // 服务器返回错误状态码
+      // 401 时调用注册的登出回调，让 AuthGuard 重新渲染登录页（不 reload，避免无限循环）
+      if (error.response.status === 401) {
+        _onUnauthorized?.();
+      }
       console.error('API Error:', error.response.data);
     } else if (error.request) {
-      // 请求已发送但没有收到响应
       console.error('Network Error:', error.request);
     } else {
-      // 其他错误
       console.error('Error:', error.message);
     }
     return Promise.reject(error);
@@ -82,4 +110,3 @@ export const getImageUrl = (path?: string, timestamp?: string | number): string 
 };
 
 export default apiClient;
-

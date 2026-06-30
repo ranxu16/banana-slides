@@ -30,10 +30,25 @@ from utils import (
     success_response, error_response, not_found, bad_request,
     parse_page_ids_from_body, get_filtered_pages
 )
+from utils.auth import require_auth, get_current_user
 
 logger = logging.getLogger(__name__)
 
 project_bp = Blueprint('projects', __name__, url_prefix='/api/projects')
+
+
+def _get_project_or_403(project_id: str):
+    """获取 project 并校验归属，返回 (project, error_response)。"""
+    from flask import g
+    project = Project.query.get(project_id)
+    if not project:
+        return None, not_found('Project')
+    current_user = get_current_user()
+    # user_id 为 None 的历史数据：只有管理员可访问
+    if project.user_id != current_user.id:
+        if not current_user.is_admin:
+            return None, not_found('Project')  # 故意返回 404 不暴露存在性
+    return project, None
 
 
 def _get_project_reference_files_content(project_id: str) -> list:
@@ -167,6 +182,7 @@ def _smart_merge_pages(project_id, pages_data):
 
 
 @project_bp.route('', methods=['GET'])
+@require_auth
 def list_projects():
     """
     GET /api/projects - Get all projects (for history)
@@ -176,6 +192,7 @@ def list_projects():
     - offset: offset for pagination (default: 0)
     """
     try:
+        current_user = get_current_user()
         # Parameter validation
         limit = request.args.get('limit', 50, type=int)
         offset = request.args.get('offset', 0, type=int)
@@ -184,10 +201,11 @@ def list_projects():
         limit = min(max(1, limit), 100)  # Between 1-100
         offset = max(0, offset)  # Non-negative
 
-        # Get total count for pagination
-        total = Project.query.count()
+        # 只返回当前用户的项目
+        base_query = Project.query.filter(Project.user_id == current_user.id)
+        total = base_query.count()
 
-        projects = Project.query\
+        projects = base_query\
             .options(joinedload(Project.pages))\
             .order_by(desc(Project.updated_at))\
             .limit(limit)\
@@ -207,6 +225,7 @@ def list_projects():
 
 
 @project_bp.route('', methods=['POST'])
+@require_auth
 def create_project():
     """
     POST /api/projects - Create a new project
@@ -251,7 +270,8 @@ def create_project():
             description_text=data.get('description_text'),
             template_style=data.get('template_style'),
             image_aspect_ratio=image_aspect_ratio,
-            status='DRAFT'
+            status='DRAFT',
+            user_id=get_current_user().id,
         )
         
         db.session.add(project)
@@ -277,20 +297,20 @@ def create_project():
 
 
 @project_bp.route('/<project_id>', methods=['GET'])
+@require_auth
 def get_project(project_id):
     """
     GET /api/projects/{project_id} - Get project details
     """
     try:
-        # Use eager loading to load project and related pages
+        project, err = _get_project_or_403(project_id)
+        if err:
+            return err
+        # reload with eager pages
         project = Project.query\
             .options(joinedload(Project.pages))\
             .filter(Project.id == project_id)\
             .first()
-        
-        if not project:
-            return not_found('Project')
-        
         return success_response(project.to_dict(include_pages=True))
     
     except Exception as e:
@@ -299,6 +319,7 @@ def get_project(project_id):
 
 
 @project_bp.route('/<project_id>', methods=['PUT'])
+@require_auth
 def update_project(project_id):
     """
     PUT /api/projects/{project_id} - Update project
@@ -310,14 +331,14 @@ def update_project(project_id):
     }
     """
     try:
-        # Use eager loading to load project and pages (for page order updates)
+        project, err = _get_project_or_403(project_id)
+        if err:
+            return err
+        # reload with eager pages for order updates
         project = Project.query\
             .options(joinedload(Project.pages))\
             .filter(Project.id == project_id)\
             .first()
-        
-        if not project:
-            return not_found('Project')
         
         data = request.get_json()
 
@@ -399,15 +420,15 @@ def update_project(project_id):
 
 
 @project_bp.route('/<project_id>', methods=['DELETE'])
+@require_auth
 def delete_project(project_id):
     """
     DELETE /api/projects/{project_id} - Delete project
     """
     try:
-        project = Project.query.get(project_id)
-        
-        if not project:
-            return not_found('Project')
+        project, err = _get_project_or_403(project_id)
+        if err:
+            return err
         
         # Delete project files
         from services import FileService
@@ -427,6 +448,7 @@ def delete_project(project_id):
 
 
 @project_bp.route('/<project_id>/generate/outline', methods=['POST'])
+@require_auth
 def generate_outline(project_id):
     """
     POST /api/projects/{project_id}/generate/outline - Generate outline
@@ -442,10 +464,9 @@ def generate_outline(project_id):
     }
     """
     try:
-        project = Project.query.get(project_id)
-        
-        if not project:
-            return not_found('Project')
+        project, err = _get_project_or_403(project_id)
+        if err:
+            return err
         
         # Get singleton AI service instance
         ai_service = get_ai_service()
@@ -519,6 +540,7 @@ def generate_outline(project_id):
 
 
 @project_bp.route('/<project_id>/generate/outline/stream', methods=['POST'])
+@require_auth
 def generate_outline_stream(project_id):
     """
     POST /api/projects/{project_id}/generate/outline/stream - Stream outline generation via SSE
@@ -532,9 +554,9 @@ def generate_outline_stream(project_id):
       event: error   — error occurred {message}
     """
     # Validate project exists before entering the generator
-    project = Project.query.get(project_id)
-    if not project:
-        return not_found('Project')
+    project, err = _get_project_or_403(project_id)
+    if err:
+        return err
 
     data = request.get_json() or {}
     language = data.get('language', current_app.config.get('OUTPUT_LANGUAGE', 'zh'))
@@ -640,6 +662,7 @@ def _sse_event(event: str, data: dict) -> str:
 
 
 @project_bp.route('/<project_id>/generate/from-description', methods=['POST'])
+@require_auth
 def generate_from_description(project_id):
     """
     POST /api/projects/{project_id}/generate/from-description - Generate outline and page descriptions from description text
@@ -658,10 +681,9 @@ def generate_from_description(project_id):
     """
     
     try:
-        project = Project.query.get(project_id)
-        
-        if not project:
-            return not_found('Project')
+        project, err = _get_project_or_403(project_id)
+        if err:
+            return err
         
         if project.creation_type != 'descriptions':
             return bad_request("This endpoint is only for descriptions type projects")
@@ -757,6 +779,7 @@ def generate_from_description(project_id):
 
 
 @project_bp.route('/<project_id>/generate/descriptions', methods=['POST'])
+@require_auth
 def generate_descriptions(project_id):
     """
     POST /api/projects/{project_id}/generate/descriptions - Generate descriptions
@@ -768,10 +791,9 @@ def generate_descriptions(project_id):
     }
     """
     try:
-        project = Project.query.get(project_id)
-        
-        if not project:
-            return not_found('Project')
+        project, err = _get_project_or_403(project_id)
+        if err:
+            return err
         
         if not project.pages:
             return bad_request("Project must have outline generated first")
@@ -850,6 +872,7 @@ def generate_descriptions(project_id):
 
 
 @project_bp.route('/<project_id>/generate/descriptions/stream', methods=['POST'])
+@require_auth
 def generate_descriptions_stream(project_id):
     """
     POST /api/projects/{project_id}/generate/descriptions/stream - Stream description generation via SSE
@@ -861,9 +884,9 @@ def generate_descriptions_stream(project_id):
       event: done        — {total, pages: [...]}
       event: error       — {message}
     """
-    project = Project.query.get(project_id)
-    if not project:
-        return not_found('Project')
+    project, err = _get_project_or_403(project_id)
+    if err:
+        return err
 
     if not project.pages:
         return bad_request("Project must have outline generated first")
@@ -992,6 +1015,7 @@ def generate_descriptions_stream(project_id):
 
 
 @project_bp.route('/<project_id>/generate/images', methods=['POST'])
+@require_auth
 def generate_images(project_id):
     """
     POST /api/projects/{project_id}/generate/images - Generate images
@@ -1005,10 +1029,9 @@ def generate_images(project_id):
     }
     """
     try:
-        project = Project.query.get(project_id)
-        
-        if not project:
-            return not_found('Project')
+        project, err = _get_project_or_403(project_id)
+        if err:
+            return err
         
         # if project.status not in ['DESCRIPTIONS_GENERATED', 'OUTLINE_GENERATED']:
         #     return bad_request("Project must have descriptions generated first")
@@ -1114,15 +1137,21 @@ def generate_images(project_id):
 
 
 @project_bp.route('/<project_id>/tasks/<task_id>', methods=['GET'])
+@require_auth
 def get_task_status(project_id, task_id):
     """
     GET /api/projects/{project_id}/tasks/{task_id} - Get task status
     """
     try:
         task = Task.query.get(task_id)
-        
-        if not task or task.project_id != project_id:
+
+        expected_project_id = 'global' if project_id in {'global', 'none'} else project_id
+        if not task or task.project_id != expected_project_id:
             return not_found('Task')
+        if expected_project_id != 'global':
+            _, err = _get_project_or_403(project_id)
+            if err:
+                return err
         
         return success_response(task.to_dict())
     
@@ -1132,6 +1161,7 @@ def get_task_status(project_id, task_id):
 
 
 @project_bp.route('/<project_id>/refine/outline', methods=['POST'])
+@require_auth
 def refine_outline(project_id):
     """
     POST /api/projects/{project_id}/refine/outline - Refine outline based on user requirements
@@ -1143,10 +1173,9 @@ def refine_outline(project_id):
     }
     """
     try:
-        project = Project.query.get(project_id)
-        
-        if not project:
-            return not_found('Project')
+        project, err = _get_project_or_403(project_id)
+        if err:
+            return err
         
         data = request.get_json()
         
@@ -1229,6 +1258,7 @@ def refine_outline(project_id):
 
 
 @project_bp.route('/<project_id>/refine/descriptions', methods=['POST'])
+@require_auth
 def refine_descriptions(project_id):
     """
     POST /api/projects/{project_id}/refine/descriptions - Refine page descriptions based on user requirements
@@ -1240,10 +1270,9 @@ def refine_descriptions(project_id):
     }
     """
     try:
-        project = Project.query.get(project_id)
-        
-        if not project:
-            return not_found('Project')
+        project, err = _get_project_or_403(project_id)
+        if err:
+            return err
         
         data = request.get_json()
         
@@ -1353,6 +1382,7 @@ def refine_descriptions(project_id):
 
 
 @project_bp.route('/renovation', methods=['POST'])
+@require_auth
 def create_ppt_renovation_project():
     """
     POST /api/projects/renovation - Create a PPT renovation project
@@ -1391,7 +1421,8 @@ def create_ppt_renovation_project():
         project = Project(
             creation_type='ppt_renovation',
             template_style=template_style,
-            status='DRAFT'
+            status='DRAFT',
+            user_id=get_current_user().id,
         )
         db.session.add(project)
         db.session.commit()
@@ -1599,6 +1630,7 @@ style_bp = Blueprint('style', __name__, url_prefix='/api')
 
 
 @style_bp.route('/extract-style', methods=['POST'])
+@require_auth
 def extract_style():
     """
     POST /api/extract-style - Extract style description from an image

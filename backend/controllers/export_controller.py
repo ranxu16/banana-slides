@@ -16,6 +16,7 @@ from utils import (
     error_response, not_found, bad_request, success_response,
     parse_page_ids_from_query, parse_page_ids_from_body, get_filtered_pages
 )
+from utils.auth import require_auth, get_current_user
 from services import ExportService, FileService
 from services.ai_service_manager import get_ai_service
 from services.prompts import normalize_narration_generation_config
@@ -23,6 +24,17 @@ from services.prompts import normalize_narration_generation_config
 logger = logging.getLogger(__name__)
 
 export_bp = Blueprint('export', __name__, url_prefix='/api/projects')
+
+def _get_project_or_403(project_id: str):
+    """获取 project 并校验归属，返回 (project, error_response)。"""
+    project = Project.query.get(project_id)
+    if not project:
+        return None, not_found('Project')
+    current_user = get_current_user()
+    if project.user_id != current_user.id:
+        if not current_user.is_admin:
+            return None, not_found('Project')
+    return project, None
 
 
 def _parse_pptx_transition_effects():
@@ -52,6 +64,7 @@ def _resolve_exports_root(project_id):
 
 
 @export_bp.route('/<project_id>/exports', methods=['GET'])
+@require_auth
 def list_exports(project_id):
     """
     GET /api/projects/{project_id}/exports - 列出项目已导出的文件
@@ -59,9 +72,9 @@ def list_exports(project_id):
     返回 exports 目录下的文件列表（名称、大小、修改时间、下载链接）。
     """
     try:
-        project = db.session.get(Project, project_id)
-        if not project:
-            return not_found('Project')
+        project, err = _get_project_or_403(project_id)
+        if err:
+            return err
 
         exports_root = _resolve_exports_root(project_id)
         if exports_root is None:
@@ -104,14 +117,15 @@ def list_exports(project_id):
 
 
 @export_bp.route('/<project_id>/exports/<filename>', methods=['DELETE'])
+@require_auth
 def delete_export(project_id, filename):
     """
     DELETE /api/projects/{project_id}/exports/{filename} - 删除项目已导出的文件
     """
     try:
-        project = db.session.get(Project, project_id)
-        if not project:
-            return not_found('Project')
+        project, err = _get_project_or_403(project_id)
+        if err:
+            return err
 
         safe_filename = secure_filename(filename)
         if not safe_filename or safe_filename != filename:
@@ -138,6 +152,7 @@ def delete_export(project_id, filename):
 
 
 @export_bp.route('/<project_id>/export/pptx', methods=['GET'])
+@require_auth
 def export_pptx(project_id):
     """
     GET /api/projects/{project_id}/export/pptx?filename=...&page_ids=id1,id2,id3 - Export PPTX
@@ -157,10 +172,9 @@ def export_pptx(project_id):
         }
     """
     try:
-        project = Project.query.get(project_id)
-        
-        if not project:
-            return not_found('Project')
+        project, err = _get_project_or_403(project_id)
+        if err:
+            return err
         
         # Get page_ids from query params and fetch filtered pages
         selected_page_ids = parse_page_ids_from_query(request)
@@ -224,6 +238,7 @@ def export_pptx(project_id):
 
 
 @export_bp.route('/<project_id>/export/pdf', methods=['GET'])
+@require_auth
 def export_pdf(project_id):
     """
     GET /api/projects/{project_id}/export/pdf?filename=...&page_ids=id1,id2,id3 - Export PDF
@@ -243,10 +258,9 @@ def export_pdf(project_id):
         }
     """
     try:
-        project = Project.query.get(project_id)
-        
-        if not project:
-            return not_found('Project')
+        project, err = _get_project_or_403(project_id)
+        if err:
+            return err
         
         # Get page_ids from query params and fetch filtered pages
         selected_page_ids = parse_page_ids_from_query(request)
@@ -298,6 +312,7 @@ def export_pdf(project_id):
 
 
 @export_bp.route('/<project_id>/export/images', methods=['GET'])
+@require_auth
 def export_images(project_id):
     """
     GET /api/projects/{project_id}/export/images?page_ids=id1,id2,id3 - Export images
@@ -366,6 +381,7 @@ def export_images(project_id):
 
 
 @export_bp.route('/<project_id>/export/editable-pptx', methods=['POST'])
+@require_auth
 def export_editable_pptx(project_id):
     """
     POST /api/projects/{project_id}/export/editable-pptx - 导出可编辑PPTX（异步）
@@ -403,10 +419,9 @@ def export_editable_pptx(project_id):
     轮询 /api/projects/{project_id}/tasks/{task_id} 获取进度和下载链接
     """
     try:
-        project = Project.query.get(project_id)
-        
-        if not project:
-            return not_found('Project')
+        project, err = _get_project_or_403(project_id)
+        if err:
+            return err
         
         # Get parameters from request body
         data = request.get_json() or {}
@@ -469,10 +484,14 @@ def export_editable_pptx(project_id):
             True if project.enable_icon_subject_extraction is None
             else bool(project.enable_icon_subject_extraction)
         )
-        enable_visual_structure_analysis = (
-            False if project.enable_visual_structure_analysis is None
-            else bool(project.enable_visual_structure_analysis)
-        )
+        enable_visual_structure_analysis = data.get('enable_visual_structure_analysis')
+        if enable_visual_structure_analysis is None:
+            enable_visual_structure_analysis = (
+                True if project.enable_visual_structure_analysis is None
+                else bool(project.enable_visual_structure_analysis)
+            )
+        else:
+            enable_visual_structure_analysis = bool(enable_visual_structure_analysis)
         logger.info(
             f"Export settings: extractor={export_extractor_method}, "
             f"inpaint={export_inpaint_method}, "
@@ -515,6 +534,7 @@ def export_editable_pptx(project_id):
 
 
 @export_bp.route('/<project_id>/export/video', methods=['POST'])
+@require_auth
 def export_video(project_id):
     """
     POST /api/projects/{project_id}/export/video - 导出讲解视频（异步）
@@ -535,10 +555,9 @@ def export_video(project_id):
         JSON with task_id for polling via /api/projects/{project_id}/tasks/{task_id}
     """
     try:
-        project = Project.query.get(project_id)
-
-        if not project:
-            return not_found('Project')
+        project, err = _get_project_or_403(project_id)
+        if err:
+            return err
 
         data = request.get_json() or {}
 

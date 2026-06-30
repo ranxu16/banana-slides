@@ -15,14 +15,23 @@ import threading
 
 from models import db, ReferenceFile, Project
 from utils.response import success_response, error_response, bad_request, not_found
+from utils.auth import require_auth, get_current_user, get_project_or_404, user_can_access_project
 from services.file_parser_service import FileParserService
 from services.material_import_service import import_reference_markdown_images_to_materials
+from sqlalchemy import or_
 
 logger = logging.getLogger(__name__)
 
 _import_lock = threading.Lock()
 
 reference_file_bp = Blueprint('reference_file', __name__)
+
+
+def _can_access_reference_file(reference_file: ReferenceFile) -> bool:
+    if reference_file.project_id is None:
+        return True
+    project = Project.query.get(reference_file.project_id)
+    return user_can_access_project(project)
 
 
 def _allowed_file(filename: str, allowed_extensions: set) -> bool:
@@ -132,6 +141,7 @@ def _parse_file_async(file_id: str, file_path: str, filename: str, app):
 
 
 @reference_file_bp.route('/upload', methods=['POST'])
+@require_auth
 def upload_reference_file():
     """
     POST /api/reference-files/upload - Upload a reference file
@@ -182,9 +192,9 @@ def upload_reference_file():
             project_id = None
         else:
             # Verify project exists
-            project = Project.query.get(project_id)
-            if not project:
-                return not_found('Project')
+            _, err = get_project_or_404(project_id)
+            if err:
+                return err
         
         # Secure filename for filesystem (but keep original for database)
         # secure_filename removes non-ASCII chars, so we need to handle Chinese characters
@@ -240,6 +250,7 @@ def upload_reference_file():
 
 
 @reference_file_bp.route('/<file_id>', methods=['GET'])
+@require_auth
 def get_reference_file(file_id):
     """
     GET /api/reference-files/<file_id> - Get reference file information
@@ -251,6 +262,8 @@ def get_reference_file(file_id):
         reference_file = ReferenceFile.query.get(file_id)
         if not reference_file:
             return not_found('Reference file')
+        if not _can_access_reference_file(reference_file):
+            return not_found('Reference file')
         
         # 单个文件查询时包含内容和失败计数（会在 to_dict 中根据状态判断是否计算）
         return success_response({'file': reference_file.to_dict(include_content=True, include_failed_count=True)})
@@ -261,6 +274,7 @@ def get_reference_file(file_id):
 
 
 @reference_file_bp.route('/<file_id>', methods=['DELETE'])
+@require_auth
 def delete_reference_file(file_id):
     """
     DELETE /api/reference-files/<file_id> - Delete a reference file
@@ -271,6 +285,8 @@ def delete_reference_file(file_id):
     try:
         reference_file = ReferenceFile.query.get(file_id)
         if not reference_file:
+            return not_found('Reference file')
+        if not _can_access_reference_file(reference_file):
             return not_found('Reference file')
         
         # Delete file from disk
@@ -297,6 +313,7 @@ def delete_reference_file(file_id):
 
 
 @reference_file_bp.route('/project/<project_id>', methods=['GET'])
+@require_auth
 def list_project_reference_files(project_id):
     """
     GET /api/reference-files/project/<project_id> - List all reference files for a project
@@ -312,15 +329,21 @@ def list_project_reference_files(project_id):
     try:
         # Special case: 'all' means list all files
         if project_id == 'all':
-            reference_files = ReferenceFile.query.all()
+            current_user = get_current_user()
+            if current_user.is_admin:
+                reference_files = ReferenceFile.query.all()
+            else:
+                reference_files = ReferenceFile.query.outerjoin(Project).filter(
+                    or_(ReferenceFile.project_id.is_(None), Project.user_id == current_user.id)
+                ).all()
         # Special case: 'global' or 'none' means list global files (not associated with any project)
         elif project_id in ['global', 'none']:
             reference_files = ReferenceFile.query.filter_by(project_id=None).all()
         else:
             # Verify project exists
-            project = Project.query.get(project_id)
-            if not project:
-                return not_found('Project')
+            _, err = get_project_or_404(project_id)
+            if err:
+                return err
             
             reference_files = ReferenceFile.query.filter_by(project_id=project_id).all()
         
@@ -335,6 +358,7 @@ def list_project_reference_files(project_id):
 
 
 @reference_file_bp.route('/<file_id>/parse', methods=['POST'])
+@require_auth
 def trigger_file_parse(file_id):
     """
     POST /api/reference-files/<file_id>/parse - Trigger parsing for a reference file
@@ -345,6 +369,8 @@ def trigger_file_parse(file_id):
     try:
         reference_file = ReferenceFile.query.get(file_id)
         if not reference_file:
+            return not_found('Reference file')
+        if not _can_access_reference_file(reference_file):
             return not_found('Reference file')
         
         # 如果正在解析，直接返回
@@ -391,6 +417,7 @@ def trigger_file_parse(file_id):
 
 
 @reference_file_bp.route('/<file_id>/associate', methods=['POST'])
+@require_auth
 def associate_file_to_project(file_id):
     """
     POST /api/reference-files/<file_id>/associate - Associate a reference file to a project
@@ -407,6 +434,8 @@ def associate_file_to_project(file_id):
         reference_file = ReferenceFile.query.get(file_id)
         if not reference_file:
             return not_found('Reference file')
+        if not _can_access_reference_file(reference_file):
+            return not_found('Reference file')
         
         data = request.get_json() or {}
         project_id = data.get('project_id')
@@ -415,9 +444,9 @@ def associate_file_to_project(file_id):
             return bad_request("project_id is required")
         
         # Verify project exists
-        project = Project.query.get(project_id)
-        if not project:
-            return not_found('Project')
+        _, err = get_project_or_404(project_id)
+        if err:
+            return err
         
         # Persist the association first, then refresh parsing state to close the
         # race with the background parser finishing at the same time.
@@ -456,6 +485,7 @@ def associate_file_to_project(file_id):
 
 
 @reference_file_bp.route('/<file_id>/dissociate', methods=['POST'])
+@require_auth
 def dissociate_file_from_project(file_id):
     """
     POST /api/reference-files/<file_id>/dissociate - Remove a reference file from its project
@@ -469,6 +499,8 @@ def dissociate_file_from_project(file_id):
     try:
         reference_file = ReferenceFile.query.get(file_id)
         if not reference_file:
+            return not_found('Reference file')
+        if not _can_access_reference_file(reference_file):
             return not_found('Reference file')
         
         # Remove project association

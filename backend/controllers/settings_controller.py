@@ -13,6 +13,7 @@ from flask import Blueprint, request, current_app
 from PIL import Image
 from models import db, Settings, Task
 from utils import success_response, error_response, bad_request
+from utils.auth import require_admin
 from config import Config, PROJECT_ROOT
 from services.ai_service import AIService
 from services.file_parser_service import FileParserService
@@ -186,6 +187,7 @@ def temporary_settings_override(settings_override: dict):
 
 
 @settings_bp.route("/", methods=["GET"], strict_slashes=False)
+@require_admin
 def get_settings():
     """
     GET /api/settings - Get application settings
@@ -203,6 +205,7 @@ def get_settings():
 
 
 @settings_bp.route("/check-update", methods=["GET"], strict_slashes=False)
+@require_admin
 def check_update():
     """
     GET /api/settings/check-update - Check Docker Hub for a newer image.
@@ -219,6 +222,7 @@ def check_update():
 
 
 @settings_bp.route("/", methods=["PUT"], strict_slashes=False)
+@require_admin
 def update_settings():
     """
     PUT /api/settings - Update application settings
@@ -427,6 +431,7 @@ def update_settings():
 
 
 @settings_bp.route("/reset", methods=["POST"], strict_slashes=False)
+@require_admin
 def reset_settings():
     """
     POST /api/settings/reset - Reset settings to default values
@@ -490,6 +495,7 @@ def reset_settings():
 
 
 @settings_bp.route("/elevenlabs-voices", methods=["GET"], strict_slashes=False)
+@require_admin
 def get_elevenlabs_voices():
     """GET /api/settings/elevenlabs-voices - 用存储的 API Key 拉取可用声音列表"""
     from models import Settings
@@ -548,6 +554,7 @@ def get_elevenlabs_voices():
 
 
 @settings_bp.route("/active-config", methods=["GET"], strict_slashes=False)
+@require_admin
 def get_active_config():
     """
     GET /api/settings/active-config - Return current app.config values for AI settings.
@@ -563,6 +570,7 @@ def get_active_config():
 
 
 @settings_bp.route("/verify", methods=["POST"], strict_slashes=False)
+@require_admin
 def verify_api_key():
     """
     POST /api/settings/verify - 验证模型配置是否可用
@@ -1182,6 +1190,7 @@ def _run_test_async(task_id: str, test_name: str, test_settings: dict, app):
 
 
 @settings_bp.route("/tests/<test_name>", methods=["POST"], strict_slashes=False)
+@require_admin
 def run_settings_test(test_name: str):
     """
     POST /api/settings/tests/<test_name> - 启动异步服务测试
@@ -1288,6 +1297,7 @@ def run_settings_test(test_name: str):
 
 
 @settings_bp.route("/tests/<task_id>/status", methods=["GET"], strict_slashes=False)
+@require_admin
 def get_test_status(task_id: str):
     """
     GET /api/settings/tests/<task_id>/status - 查询测试任务状态

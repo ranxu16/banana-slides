@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { Home, Trash2, Sun, Moon } from 'lucide-react';
-import { Button, Loading, Card, Pagination, useToast, useConfirm } from '@/components/shared';
+import { Button, Loading, Card, Pagination, useToast, ToastContainer, useConfirm } from '@/components/shared';
 import { ProjectCard } from '@/components/history/ProjectCard';
 import { useProjectStore } from '@/store/useProjectStore';
 import { useTheme } from '@/hooks/useTheme';
@@ -95,7 +95,7 @@ export const History: React.FC = () => {
   const [isDeleting, setIsDeleting] = useState(false);
   const [editingProjectId, setEditingProjectId] = useState<string | null>(null);
   const [editingTitle, setEditingTitle] = useState<string>('');
-  const { show, ToastContainer } = useToast();
+  const { show, toasts, remove } = useToast();
   const { confirm, ConfirmDialog } = useConfirm();
 
   const totalPages = Math.ceil(totalProjects / pageSize);
@@ -528,7 +528,7 @@ export const History: React.FC = () => {
           </div>
         )}
       </main>
-      <ToastContainer />
+      <ToastContainer toasts={toasts} onRemove={remove} />
       {ConfirmDialog}
     </div>
   );
