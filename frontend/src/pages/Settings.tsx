@@ -2564,7 +2564,7 @@ export const Settings: React.FC = () => {
           </div>
 
           <div className="mt-4 rounded-md border border-blue-100 bg-blue-50 px-3 py-2 text-sm text-blue-700">
-            当前已能展示项目级覆盖字段和当前值；由于历史项目字段带默认值，暂未区分“继承全局默认”和“项目显式覆盖”。后续需要新增覆盖元数据后再开放恢复全局默认操作。
+            当前已能展示项目级覆盖字段、当前值和显式覆盖状态；历史项目未操作过的字段会显示为“继承或默认”。下一步会把恢复全局默认操作接到这些元数据上。
           </div>
 
           {projectOverrideProjects.length > 0 ? (
@@ -2585,13 +2585,22 @@ export const Settings: React.FC = () => {
                           未启用继承追踪
                         </span>
                       )}
+                      {project.project_overrides?.inheritance_tracking === true && (
+                        <span className="rounded-md border border-emerald-200 bg-emerald-50 px-2 py-1 text-xs text-emerald-700">
+                          已启用继承追踪
+                        </span>
+                      )}
                     </div>
                     <div className="mt-3 grid gap-2 md:grid-cols-2 xl:grid-cols-3">
                       {fields.map(([fieldKey, field]) => (
                         <div key={fieldKey} className="rounded-md border border-gray-200 bg-white px-3 py-2">
                           <div className="flex items-center justify-between gap-2">
                             <span className="text-xs text-gray-500">{field.label}</span>
-                            <span className="text-[11px] text-gray-400">{field.group === 'export' ? '导出' : '项目'}</span>
+                            <span className={`rounded px-1.5 py-0.5 text-[11px] font-medium ${
+                              field.explicit ? 'bg-amber-50 text-amber-700' : 'bg-gray-100 text-gray-500'
+                            }`}>
+                              {field.explicit ? '项目覆盖' : '继承或默认'}
+                            </span>
                           </div>
                           <div className="mt-1 truncate text-sm font-semibold text-gray-900" title={formatProjectOverrideValue(field.value)}>
                             {formatProjectOverrideValue(field.value)}

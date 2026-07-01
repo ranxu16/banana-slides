@@ -73,6 +73,7 @@ export interface ProjectOverrideField {
   label: string;
   group: 'project' | 'export' | string;
   source: 'project_value' | string;
+  explicit?: boolean;
   value: string | boolean | number | null | undefined;
 }
 

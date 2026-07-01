@@ -80,10 +80,37 @@ class TestProjectGet:
 
         data = assert_success_response(response)
         overrides = data['data']['project_overrides']
-        assert overrides['inheritance_tracking'] is False
-        assert overrides['fields']['image_aspect_ratio']['source'] == 'project_value'
+        assert overrides['inheritance_tracking'] is True
+        assert overrides['fields']['image_aspect_ratio']['source'] == 'inherited_or_default'
+        assert overrides['fields']['image_aspect_ratio']['explicit'] is False
         assert overrides['fields']['export_extractor_method']['group'] == 'export'
         assert overrides['fields']['enable_visual_structure_analysis']['label'] == '视觉结构分析'
+
+    def test_update_project_marks_and_clears_explicit_project_override(self, client, sample_project):
+        """更新项目覆盖字段后记录显式覆盖，清除后恢复非显式来源。"""
+        if not sample_project:
+            pytest.skip("项目创建失败")
+
+        project_id = sample_project['project_id']
+        response = client.put(f'/api/projects/{project_id}', json={
+            'export_allow_partial': True,
+        })
+
+        data = assert_success_response(response)
+        override = data['data']['project_overrides']['fields']['export_allow_partial']
+        assert override['value'] is True
+        assert override['explicit'] is True
+        assert override['source'] == 'project_override'
+
+        response = client.put(f'/api/projects/{project_id}', json={
+            'clear_project_overrides': ['export_allow_partial'],
+        })
+
+        data = assert_success_response(response)
+        override = data['data']['project_overrides']['fields']['export_allow_partial']
+        assert override['value'] is True
+        assert override['explicit'] is False
+        assert override['source'] == 'inherited_or_default'
     
     def test_get_project_not_found(self, client):
         """测试获取不存在的项目"""

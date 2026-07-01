@@ -2,6 +2,7 @@
 Project model
 """
 import uuid
+import json
 from datetime import datetime
 from . import db
 
@@ -64,6 +65,7 @@ class Project(db.Model):
     enable_icon_subject_extraction = db.Column(db.Boolean, nullable=True, default=True)  # 是否对小尺寸图标走百度智能抠图
     enable_visual_structure_analysis = db.Column(db.Boolean, nullable=True, default=True)  # 是否启用 Vision 视觉结构分析（Beta）
     image_aspect_ratio = db.Column(db.String(10), nullable=False, server_default='16:9', default='16:9')
+    project_override_fields = db.Column(db.Text, nullable=True)  # JSON list of fields explicitly overridden by this project
     status = db.Column(db.String(50), nullable=False, default='DRAFT')
     # 归属用户（NULL = 历史数据，归属管理员）
     user_id = db.Column(db.String(36), db.ForeignKey('users.id', ondelete='SET NULL'), nullable=True)
@@ -79,6 +81,31 @@ class Project(db.Model):
     materials = db.relationship('Material', back_populates='project', lazy='select',
                            cascade='all, delete-orphan')
     owner = db.relationship('User', back_populates='projects', foreign_keys=[user_id])
+
+    def get_project_override_fields(self):
+        if not self.project_override_fields:
+            return set()
+        try:
+            data = json.loads(self.project_override_fields)
+            if isinstance(data, list):
+                return {field for field in data if field in PROJECT_OVERRIDE_FIELDS}
+        except (TypeError, json.JSONDecodeError):
+            pass
+        return set()
+
+    def set_project_override_fields(self, fields):
+        normalized = sorted({field for field in fields if field in PROJECT_OVERRIDE_FIELDS})
+        self.project_override_fields = json.dumps(normalized, ensure_ascii=False) if normalized else None
+
+    def mark_project_override(self, field):
+        fields = self.get_project_override_fields()
+        fields.add(field)
+        self.set_project_override_fields(fields)
+
+    def clear_project_override(self, field):
+        fields = self.get_project_override_fields()
+        fields.discard(field)
+        self.set_project_override_fields(fields)
     
     def to_dict(self, include_pages=False):
         """Convert to dictionary"""
@@ -113,13 +140,16 @@ class Project(db.Model):
             'created_at': created_at_str,
             'updated_at': updated_at_str,
         }
+        explicit_overrides = self.get_project_override_fields()
         data['project_overrides'] = {
-            'inheritance_tracking': False,
-            'source_order': ['global', 'personal', 'project_value'],
+            'inheritance_tracking': True,
+            'source_order': ['global', 'personal', 'project_override'],
             'fields': {
                 field: {
                     **meta,
                     'value': data.get(field),
+                    'source': 'project_override' if field in explicit_overrides else 'inherited_or_default',
+                    'explicit': field in explicit_overrides,
                 }
                 for field, meta in PROJECT_OVERRIDE_FIELDS.items()
             },

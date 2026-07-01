@@ -15,6 +15,8 @@ const projectSettingsI18n = {
       projectOverridesTitle: "当前项目覆盖项",
       projectOverridesDesc: "这些字段来自当前项目，会优先影响本项目的生成或导出行为。",
       inheritanceNotTracked: "暂未区分继承全局与显式覆盖",
+      explicitOverride: "项目覆盖",
+      inheritedOrDefault: "继承或默认",
       globalConfigTitle: "全局设置", globalConfigDesc: "这些设置应用于所有项目",
       aspectRatio: "画面比例", aspectRatioDesc: "设置生成幻灯片图片的画面比例",
       aspectRatioLocked: "已生成图片的项目无法调整画面比例",
@@ -57,6 +59,8 @@ const projectSettingsI18n = {
       projectOverridesTitle: "Current Project Overrides",
       projectOverridesDesc: "These fields come from the current project and take priority for this project.",
       inheritanceNotTracked: "Inheritance vs explicit override is not tracked yet",
+      explicitOverride: "Project Override",
+      inheritedOrDefault: "Inherited or Default",
       globalConfigTitle: "Global Settings", globalConfigDesc: "These settings apply to all projects",
       aspectRatio: "Aspect Ratio", aspectRatioDesc: "Set the aspect ratio for generated slide images",
       aspectRatioLocked: "Cannot change aspect ratio after images have been generated",
@@ -200,7 +204,14 @@ export const ProjectSettingsModal: React.FC<ProjectSettingsModalProps> = ({
         <div className="mt-3 grid gap-2 sm:grid-cols-2">
           {fields.map(([key, field]) => (
             <div key={key} className="rounded-md border border-blue-100 bg-white px-3 py-2">
-              <div className="text-xs text-gray-500">{field.label}</div>
+              <div className="flex items-center justify-between gap-2">
+                <div className="text-xs text-gray-500">{field.label}</div>
+                <span className={`rounded px-1.5 py-0.5 text-[11px] font-medium ${
+                  field.explicit ? 'bg-amber-50 text-amber-700' : 'bg-gray-100 text-gray-500'
+                }`}>
+                  {field.explicit ? t('projectSettings.explicitOverride') : t('projectSettings.inheritedOrDefault')}
+                </span>
+              </div>
               <div className="mt-1 truncate text-sm font-semibold text-gray-900" title={formatOverrideValue(field.value)}>
                 {formatOverrideValue(field.value)}
               </div>

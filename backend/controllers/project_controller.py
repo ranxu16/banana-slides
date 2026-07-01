@@ -17,6 +17,7 @@ from werkzeug.exceptions import BadRequest
 from werkzeug.utils import secure_filename
 
 from models import db, Project, Page, Task, ReferenceFile
+from models.project import PROJECT_OVERRIDE_FIELDS
 from services import ProjectContext, FileService
 from services.ai_service_manager import get_ai_service
 from services.ai_runtime import resolve_user_ai_runtime, resolve_user_image_ai_runtime
@@ -274,6 +275,8 @@ def create_project():
             status='DRAFT',
             user_id=get_current_user().id,
         )
+        if 'image_aspect_ratio' in data:
+            project.mark_project_override('image_aspect_ratio')
         
         db.session.add(project)
         db.session.commit()
@@ -377,20 +380,35 @@ def update_project(project_id):
         if 'image_aspect_ratio' in data:
             try:
                 project.image_aspect_ratio = normalize_aspect_ratio(data['image_aspect_ratio'])
+                project.mark_project_override('image_aspect_ratio')
             except ValueError as e:
                 return bad_request(str(e))
 
         # Update export settings if provided
         if 'export_extractor_method' in data:
             project.export_extractor_method = data['export_extractor_method']
+            project.mark_project_override('export_extractor_method')
         if 'export_inpaint_method' in data:
             project.export_inpaint_method = data['export_inpaint_method']
+            project.mark_project_override('export_inpaint_method')
         if 'export_allow_partial' in data:
             project.export_allow_partial = data['export_allow_partial']
+            project.mark_project_override('export_allow_partial')
         if 'enable_icon_subject_extraction' in data:
             project.enable_icon_subject_extraction = bool(data['enable_icon_subject_extraction'])
+            project.mark_project_override('enable_icon_subject_extraction')
         if 'enable_visual_structure_analysis' in data:
             project.enable_visual_structure_analysis = bool(data['enable_visual_structure_analysis'])
+            project.mark_project_override('enable_visual_structure_analysis')
+
+        if 'clear_project_overrides' in data:
+            fields_to_clear = data['clear_project_overrides'] or []
+            if not isinstance(fields_to_clear, list):
+                return bad_request("clear_project_overrides must be a list")
+            for field in fields_to_clear:
+                if field not in PROJECT_OVERRIDE_FIELDS:
+                    return bad_request(f"Unsupported project override field: {field}")
+                project.clear_project_override(field)
         
         # Update page order if provided
         if 'pages_order' in data:

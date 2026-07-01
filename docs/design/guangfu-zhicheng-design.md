@@ -1407,3 +1407,13 @@ ui-guangfu-dashboard-redesign
 - 验证：`npm run guard:brand` 通过；`npx eslint src/pages/Settings.tsx --ext ts,tsx --max-warnings 20` 通过但保留既有 `CapabilityActionCard` 未使用警告。
 - 遗留：最近项目摘要不能代表所有项目；全局配置中心后续可增加项目选择器或搜索；真正的“继承全局默认/项目显式覆盖/恢复默认”仍需新增 override 元数据字段与迁移。
 - 下一步：设计并实现项目 override 元数据存储，让项目字段能明确区分继承和显式覆盖，再接入 resolver 优先级。
+
+### 2026-07-01 23:45 - 项目覆盖元数据存储接入
+
+- 范围：`backend/models/project.py`、`backend/controllers/project_controller.py`、`backend/migrations/versions/022_add_project_override_fields.py`、`backend/tests/unit/test_api_project.py`、`frontend/src/types/index.ts`、`frontend/src/pages/Settings.tsx`、`frontend/src/components/shared/ProjectSettingsModal.tsx`、`docs/design/guangfu-zhicheng-design.md`。
+- 动作：为 `projects` 新增 `project_override_fields` JSON 文本字段，记录哪些项目字段是显式覆盖；项目创建时仅在请求提供画面比例时标记覆盖，项目更新导出策略/画面比例等字段时自动标记显式覆盖；新增 `clear_project_overrides` 支持清除覆盖元数据；项目详情 `project_overrides.fields` 增加 `explicit` 与 `source`，前端同步展示“项目覆盖 / 继承或默认”。
+- 结果：项目覆盖不再只能展示当前值，已经可以区分“用户明确改过的项目覆盖”和“历史/默认字段”。后续恢复全局默认可以基于同一个元数据字段实现。
+- 计划状态：项目 override 元数据第一片完成；项目字段值本身仍保留在 `projects` 表原字段中，尚未在清除覆盖时回填全局默认值，也尚未接入生成 resolver 的项目优先级。
+- 验证：`uv run --python 3.13 pytest backend/tests/unit/test_api_project.py::TestProjectGet -q` 通过，5 tests passed；`npm run guard:brand` 通过；`npx eslint src/pages/Settings.tsx src/components/shared/ProjectSettingsModal.tsx src/types/index.ts --ext ts,tsx --max-warnings 20` 通过但保留既有 `CapabilityActionCard` 未使用警告。
+- 遗留：需要把 `clear_project_overrides` 接入 UI 操作；需要定义清除覆盖后的字段值回填策略；需要让 resolver/导出任务读取项目覆盖来源，并验证 `项目覆盖 > 个人配置 > 全局配置 > 系统默认`。
+- 下一步：先在项目设置弹窗增加“恢复为继承/默认”操作，调用 `clear_project_overrides`；再把导出任务进度和 effective config 来源接入项目覆盖优先级。
