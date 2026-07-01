@@ -1,6 +1,6 @@
 import { apiClient, getAuthHeaders } from './client';
 import type { Project, Task, ApiResponse, CreateProjectRequest, Page, Material } from '@/types';
-import type { Settings } from '../types/index';
+import type { EffectiveSettings, PersonalSettings, Settings } from '../types/index';
 
 export type { Material };
 
@@ -1320,6 +1320,34 @@ export const updateSettings = async (
  */
 export const resetSettings = async (): Promise<ApiResponse<Settings>> => {
   const response = await apiClient.post<ApiResponse<Settings>>('/api/settings/reset');
+  return response.data;
+};
+
+export const getPersonalSettings = async (): Promise<ApiResponse<PersonalSettings>> => {
+  const response = await apiClient.get<ApiResponse<PersonalSettings>>('/api/auth/personal-settings');
+  return response.data;
+};
+
+export const updatePersonalSettings = async (
+  data: Partial<PersonalSettings> & {
+    api_key?: string;
+    text_api_key?: string;
+    image_api_key?: string;
+    image_caption_api_key?: string;
+    lazyllm_api_keys?: Record<string, string>;
+  }
+): Promise<ApiResponse<PersonalSettings>> => {
+  const response = await apiClient.put<ApiResponse<PersonalSettings>>('/api/auth/personal-settings', data);
+  return response.data;
+};
+
+export const resetPersonalSettings = async (): Promise<ApiResponse<Record<string, never>>> => {
+  const response = await apiClient.post<ApiResponse<Record<string, never>>>('/api/auth/personal-settings/reset');
+  return response.data;
+};
+
+export const getEffectiveSettings = async (): Promise<ApiResponse<EffectiveSettings>> => {
+  const response = await apiClient.get<ApiResponse<EffectiveSettings>>('/api/settings/effective');
   return response.data;
 };
 

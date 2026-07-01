@@ -738,6 +738,94 @@ ui-guangfu-dashboard-redesign
 - 编辑页/预览页统一顶部栏和基础视觉。
 - 不大改核心生成逻辑。
 
+### Phase 6: 配置后端生效链路
+
+目标：让“全局默认配置 / 个人配置 / 项目覆盖”不只停留在前端展示，而是真正参与生成、导出和服务测试。
+
+必做项：
+
+- 新增用户级个人配置 schema/API，支持当前用户读取、保存、重置个人配置。
+- 支持 `force_global_default`，用户可强制忽略个人配置并回退全局默认。
+- 支持能力级 `use_global_default` 或等价字段，允许单项能力继承全局默认。
+- 个人 API Key 加密存储、脱敏展示、按用户隔离，不返回明文。
+- 后端配置 resolver 统一计算：`系统默认 → 全局配置 → 用户个人配置 → 项目覆盖 → 当前生效值`。
+- resolver 返回每项能力的来源、执行方式、是否可用和不可用原因。
+- Codex / ChatGPT 账号连接不再只是前端提示，后端需返回账号连接状态、授权范围和当前能力是否可执行。
+- 大纲生成、页面描述、自然语言修改允许走个人订阅/账号连接或 API。
+- 图片生成、生成 PPTX、可编辑 PPTX 视觉拆层、`gpt-image-2` 独立元素生成、导出任务队列必须走 API / 企业代理。
+- 设置页服务测试必须使用 resolver 后的当前生效配置，而不是直接读取单个全局字段。
+
+验收：
+
+- 同一用户启用个人配置后，新建项目默认使用个人配置。
+- 用户切换“强制使用全局默认”后，生成任务立即回退全局默认。
+- 选择 Codex 但未连接账号时，后端返回明确不可用原因，前端不静默失败。
+- 个人密钥不进入接口响应、日志和任务记录明文。
+- 项目覆盖优先级高于个人配置，且界面能展示来源。
+
+### Phase 7: 配置链路接入生成工作流
+
+目标：把 Phase 6 的 resolver 接到实际业务调用点，避免页面配置和后端调用不一致。
+
+接入范围：
+
+- 一问生成 PPT 大纲。
+- 从描述生成大纲和页面描述。
+- 自然语言修改。
+- 图片描述 / 视觉理解。
+- 图片生成。
+- 可编辑 PPTX：GPT 视觉拆层。
+- 可编辑 PPTX：`gpt-image-2` 独立元素生成。
+- 可编辑 PPTX：拼回 PPTX 和原图对比校正。
+- 导出任务中心失败原因展示。
+
+验收：
+
+- 设置页显示的当前生效模型与后端实际调用一致。
+- 每个任务记录配置来源摘要。
+- 失败任务展示 resolver 返回的真实原因。
+- 订阅/账号连接不可用于某项后台任务时，前端提示可读，不出现泛化“网络失败”。
+
+## 14.1 当前状态快照
+
+截至 2026-07-01 14:45，当前改造状态如下。
+
+已完成：
+
+- AppShell 和工作台首页首轮重构。
+- 我的项目页面首轮重构。
+- 导出任务中心一级页面。
+- 资源中心合并，模板/素材入口收敛为资源中心。
+- 编辑/预览页外壳统一。
+- 全局配置中心前端 V2：`全局默认配置 / 个人配置` 二级入口。
+- 个人配置页已与全局配置页同构展示：基础配置、AI 模型、生成策略、文件解析、服务连接、兼容高级、服务测试、覆盖链路。
+- Codex 在前端可选择；未连接账号时显示“需连接账号”，不再禁用选项。
+
+部分完成：
+
+- 全局配置前端继续复用现有 `getSettings/updateSettings/resetSettings/test*` 能力。
+- 个人配置前端已有入口、表单结构和回退交互，但仍是前端展示/预览状态。
+- 能力接入方式已进入设计稿和 UI 提示，但后端尚未返回逐能力 `ready/reason`。
+
+未完成且必须进入后续计划：
+
+- 用户级个人配置 API。
+- 个人配置保存、重置、读取。
+- 个人 API Key 加密存储和脱敏展示。
+- `force_global_default` 后端生效。
+- 能力级继承全局默认。
+- 配置 resolver。
+- Codex / ChatGPT 账号连接能力状态和不可用原因。
+- 大纲、描述、自然语言修改、图片生成、可编辑 PPTX、导出任务等业务调用点接入 resolver。
+- 项目覆盖与个人配置的来源展示和优先级验证。
+
+下一阶段建议顺序：
+
+1. 先实现 Phase 6 的后端 schema/API/resolver，不继续堆 UI。
+2. 再把设置页个人配置保存接到后端。
+3. 再逐个接入生成工作流：大纲/描述 → 图片生成 → 可编辑 PPTX → 导出任务。
+4. 最后补来源展示、服务测试、端到端回归和截图验收。
+
 ## 15. 执行记录与进展同步规则
 
 从 2026-07-01 起，所有前端改造、后端配置改造、可编辑 PPTX 流水线改造，以及与本设计文档相关的任务，都必须在执行过程中持续更新本文件。
@@ -936,3 +1024,185 @@ ui-guangfu-dashboard-redesign
 - 验证：`npm run guard:brand` 通过；`npm run test:run -- src/tests/branding-workbench-regression.test.ts` 通过，2 tests passed；`npm run build` 通过；`git diff --check -- frontend/src/App.tsx frontend/src/components/layout/AppShell.tsx frontend/src/pages/Resources.tsx frontend/src/pages/Settings.tsx docs/design/guangfu-zhicheng-design.md` 通过；`rg` 检查旧 `/templates`、`/materials` 页面入口只剩兼容重定向、API 路径和静态模板资源路径。
 - 遗留：资源中心内部仍复用原素材/模板两个页面组件，各自 Toast/Confirm 容器后续可进一步抽到统一资源页；“使用资源/设为默认模板”仍需后端字段和编辑页上下文支持；全局配置中心字段级校验、脏状态拦截仍待做。
 - 下一步：阶段性提交本次资源中心合并与全局配置重设计；随后可继续做资源中心内聚交互，或切回后端可编辑 PPTX 稳定流水线。
+
+### 2026-07-01 12:35 - 全局配置中心 V2 设计稿重写
+
+- 范围：`docs/design/mockups/global-settings.md`、`docs/design/guangfu-zhicheng-design.md`。
+- 动作：根据“当前界面整体还是乱，需要换样式”的反馈，重写全局配置中心设计稿；从原来的分组约束升级为页面级设计，明确第一屏结构、健康状态卡、左侧导航、右侧配置画布、FormRow、SectionHeader、StickySaveBar、移动端和不做事项。
+- 结果：新设计稿定义全局配置中心为“配置工作台”，不再是一页堆叠所有表单；导航和右侧 section 一一对应；AI 模型区按能力拆分为文本生成、视觉理解、图片生成、图片描述、可编辑 PPTX 结构分析、可编辑 PPTX 独立元素生成；明确 `gpt-image-2` 是独立元素生成主线。
+- 验证：已重写 `docs/design/mockups/global-settings.md`，并在本执行记录登记；本步骤只产出设计稿，不改前端代码。
+- 遗留：需要按 V2 设计稿重新实现 `frontend/src/pages/Settings.tsx`；后续实现时需补字段级错误、dirty 状态、保存条、分组激活同步和移动端分组选择。
+- 下一步：基于 V2 设计稿重构全局配置中心界面，先做静态结构和视觉层级，再接现有保存/测试逻辑。
+
+### 2026-07-01 12:50 - 全局配置中心高保真 UI 设计稿启动
+
+- 范围：`docs/design/mockups/global-settings-v2.html`、`docs/design/mockups/global-settings.md`、`docs/design/guangfu-zhicheng-design.md`。
+- 动作：根据“设计一个全局配置界面的高保真的 UI 我看一下”的反馈，准备把 V2 信息架构转成可浏览的静态高保真页面稿；本步骤只产出设计稿，不修改正式前端代码。
+- 结果：已新增 `docs/design/mockups/global-settings-v2.html` 高保真静态稿；页面包含 AppShell 侧栏、页面标题区、全局策略条、三张健康状态卡、左侧配置导航、右侧配置画布、AI 模型能力卡、基础配置字段行、生成导出策略、服务测试、项目覆盖来源链路和底部 sticky 保存条。
+- 验证：待执行 `git diff --check`。
+- 遗留：高保真稿目前是静态 HTML，不连接接口；确认视觉方向后再进入 `Settings.tsx` 实现，并补真实保存/测试/脏状态同步。
+- 下一步：检查设计文件差异；等待视觉确认或根据反馈继续调整稿子。
+
+### 2026-07-01 13:05 - 个人模型配置与订阅集成设计补充
+
+- 范围：`docs/design/mockups/global-settings-v2.html`、`docs/design/mockups/global-settings.md`、`docs/design/guangfu-zhicheng-design.md`。
+- 动作：根据“每个用户可以配置自己的模型，也可以用默认配置；模型配置是否也可以集成订阅”的反馈，补充配置来源层级和账号/订阅连接边界。
+- 结果：已把配置来源链路升级为“系统默认 → 全局配置 → 用户个人配置 → 项目覆盖 → 当前生效值”；明确用户个人配置不是前端本地状态，而是需要后端 API、权限隔离和统一 resolver 支持；补充 API Key、API 组织计费、企业代理、用户个人 API Key、账号/订阅连接的凭据来源模型。
+- 验证：待完成能力接入方式补充后统一执行 `git diff --check`。
+- 遗留：后续实现需新增用户级模型配置 schema、个人凭据加密存储、配置 resolver 和生成流水线接入。
+- 下一步：根据“哪些功能可用订阅、哪些建议 API”的反馈，补充能力接入方式矩阵。
+
+### 2026-07-01 13:15 - 订阅与 API 能力矩阵补充
+
+- 范围：`docs/design/mockups/global-settings-v2.html`、`docs/design/mockups/global-settings.md`、`docs/design/guangfu-zhicheng-design.md`。
+- 动作：在全局配置设计中增加“能力接入方式矩阵”，区分订阅/账号连接、API Key、API 组织计费和企业代理；每项能力标记推荐接入方式、当前状态、订阅作用和不可用原因。
+- 结果：高保真稿新增“个人模型”和“能力接入方式”section；左侧导航新增个人模型、接入方式、覆盖链路；覆盖链路从两层升级为五层；文档要求后端返回每项能力的 `execution_mode`、`subscription_supported`、`api_required`、`ready` 和 `reason`，避免把订阅状态误判为后台 API 可执行。
+- 验证：待执行 `git diff --check`。
+- 遗留：正式实现时需把矩阵接入真实后端能力探测，不能写死；订阅连接可用于人工辅助、账号态、Codex/ChatGPT 登录态或企业授权能力，后台自动化生成仍需明确可执行凭据。
+- 下一步：执行设计文件检查；如视觉方向确认，再进入前后端实现拆分。
+
+### 2026-07-01 13:30 - 全局/个人二级入口与订阅能力说明重排
+
+- 范围：`docs/design/mockups/global-settings-v2.html`、`docs/design/mockups/global-settings.md`、`docs/design/guangfu-zhicheng-design.md`。
+- 动作：根据“个人和全局应该在全局配置一级入口下分成两个二级入口；能力接入方式应该是说明；生成描述、大纲可以用订阅；用户个人配置不生效时要能切回默认配置”的反馈，重排全局配置设计。
+- 结果：高保真稿新增“全局默认配置 / 个人配置”二级入口；个人配置页左侧只保留个人侧分组；删除主界面里的“能力接入方式”大 section，改为个人配置中的说明块；生效策略改为大纲生成、页面描述、自然语言修改可用订阅/账号连接，图片生成、生成 PPTX、可编辑 PPTX 视觉拆层、gpt-image-2 独立元素生成和导出任务队列必须走 API / 企业代理；个人配置新增“强制使用全局默认”和能力级回退语义。
+- 验证：`git diff --check -- docs/design/mockups/global-settings-v2.html docs/design/mockups/global-settings.md docs/design/guangfu-zhicheng-design.md` 通过；`rg` 确认高保真稿已有二级入口、个人配置回退、订阅可用和必须 API 标记，且主导航不再包含“接入方式”。
+- 遗留：正式实现需后端支持 `force_global_default`、能力级 `use_global_default`、个人订阅连接状态、个人 API Key 和统一 resolver 生效值计算。
+- 下一步：检查设计文件差异；确认视觉方向后再进入实现。
+
+### 2026-07-01 13:45 - 全局配置高保真稿操作优先级调整
+
+- 范围：`docs/design/mockups/global-settings-v2.html`、`docs/design/mockups/global-settings.md`、`docs/design/guangfu-zhicheng-design.md`。
+- 动作：根据“可操作区域占比和优先级增大，解释说明占比和优先级降低”的反馈，准备调整全局配置高保真稿的视觉权重。
+- 结果：高保真稿压缩顶部说明、健康卡说明和 section 说明；生效策略能力卡改为操作卡，突出当前方式下拉、测试、继承全局、个人 API、查看任务等动作；个人模型区使用更醒目的选择控件和“强制使用全局默认”按钮；能力接入说明从说明卡压缩为低权重帮助条；设计稿新增“操作优先级”规范。
+- 验证：`git diff --check -- docs/design/mockups/global-settings-v2.html docs/design/mockups/global-settings.md docs/design/guangfu-zhicheng-design.md` 通过；`rg` 确认高保真稿中 `action-control`、`mini-actions`、`强制使用全局默认`、`测试`、`继承全局`、`查看详情` 等操作入口已出现，说明模块降为低权重帮助条。
+- 遗留：正式实现时要按这个权重做组件，不要把能力接入说明矩阵直接放回主界面。
+- 下一步：执行设计文件检查；如视觉方向确认，再进入实现。
+
+### 2026-07-01 14:00 - 全局配置 V2 前端实现启动
+
+- 范围：`frontend/src/pages/Settings.tsx`、`docs/design/guangfu-zhicheng-design.md`。
+- 动作：按最新高保真稿开始改造全局配置中心前端；本轮先落二级入口、个人配置操作卡、全局默认配置页、低权重说明和可操作优先级，不混入后端未提交的可编辑 PPTX 流水线改动。
+- 结果：`Settings.tsx` 已新增“全局默认配置 / 个人配置”二级入口；个人配置页按操作优先级落地生效策略卡、个人模型配置、账号连接、强制使用全局默认、能力级继承全局、测试按钮和全局默认回退预览；全局默认配置继续复用现有保存、重置、服务测试、OAuth、敏感字段和原配置表单逻辑；能力接入方式作为低权重帮助条展示，不再占主配置 section。
+- 验证：`npm run guard:brand` 通过；`npm run test:run -- src/tests/branding-workbench-regression.test.ts` 通过，2 tests passed；`npm run build` 通过；`git diff --check -- frontend/src/pages/Settings.tsx docs/design/guangfu-zhicheng-design.md docs/design/mockups/global-settings.md docs/design/mockups/global-settings-v2.html` 通过；本机 `localhost:3012` 已有 node 服务监听，未另起新服务。
+- 遗留：个人配置目前是前端预览状态，后端 schema、用户级持久化、个人 API Key 加密存储、订阅连接能力状态和统一 resolver 尚未接入；正式实现下一步需要新增 `force_global_default`、能力级 `use_global_default` 和执行凭据来源计算。
+- 下一步：实现用户级个人配置 API 与 resolver，让大纲/描述/自然语言修改可走订阅/账号连接，PPTX 工作流强制走 API / 企业代理，并把前端个人配置保存接到后端。
+
+### 2026-07-01 14:20 - 个人配置界面同构修正启动
+
+- 范围：`frontend/src/pages/Settings.tsx`、`docs/design/guangfu-zhicheng-design.md`。
+- 动作：根据“个人配置界面应该和全局配置界面展示一样，现在看不到可操作说明”的反馈，调整个人配置页信息架构。
+- 结果：个人配置页已改为与全局配置同构的左侧目录和分组表单；目录包含基础配置、AI 模型、生成策略、文件解析、服务连接、兼容高级、服务测试、覆盖链路；主界面保留个人配置总策略、强制使用全局默认、能力级继承全局、账号连接和个人 API Key 操作入口，并补回生成策略、文件解析、兼容高级等与全局配置一致的字段区域。
+- 验证：`npm run guard:brand` 通过；`npm run test:run -- src/tests/branding-workbench-regression.test.ts` 通过，2 tests passed；`npm run build` 通过；`git diff --check -- frontend/src/pages/Settings.tsx docs/design/guangfu-zhicheng-design.md` 通过；`rg` 确认个人配置页已有与全局配置一致的 section。
+- 遗留：个人配置页的生成策略、文件解析和兼容高级字段目前复用现有表单控件用于前端同构展示；真正用户级持久化、敏感字段隔离和 resolver 生效计算仍需后端 API 接入。
+- 下一步：实现个人配置后端 API，把当前同构界面中的个人字段与全局字段分离，并接入最终生效值 resolver。
+
+### 2026-07-01 14:35 - Codex 可选与个人 AI 模型同构修正启动
+
+- 范围：`frontend/src/pages/Settings.tsx`、`docs/design/guangfu-zhicheng-design.md`。
+- 动作：根据“Codex 为什么显示未连接不能选择；个人配置的 AI 模型显示和全局配置不一样”的反馈，修正 Provider 选择和个人 AI 模型区展示。
+- 结果：已移除全局默认 Provider 和模型级 Provider 下拉中 Codex 的禁用逻辑，未连接时改为“需连接账号”提示；选择 Codex 后在字段下方显示需要连接 OpenAI/ChatGPT 账号的说明；个人配置的 AI 模型 section 改为复用全局配置同款 `modelConfigItems.map(renderModelConfigGroup)` 表单展示，并保留来源标签、测试文本模型、测试图片模型、测试图片识别按钮。
+- 验证：`npm run guard:brand` 通过；`npm run test:run -- src/tests/branding-workbench-regression.test.ts` 通过，2 tests passed；`npm run build` 通过；`git diff --check -- frontend/src/pages/Settings.tsx docs/design/guangfu-zhicheng-design.md` 通过；`rg` 确认不存在 Codex disabled 逻辑，个人配置 AI 模型已复用全局模型表单。
+- 遗留：Codex 选择后的真实执行仍依赖 OpenAI OAuth/账号连接状态，后端 resolver 需在下一步返回明确不可用原因；个人配置 AI 模型字段仍待后端用户级持久化。
+- 下一步：实现个人配置后端 API 与 resolver，让 Codex/订阅/API/企业代理在最终生效配置中按能力计算。
+
+### 2026-07-01 14:45 - 前端改造计划与当前状态重整
+
+- 范围：`docs/design/guangfu-zhicheng-design.md`。
+- 动作：根据“后端相关很多还没打通，把这个加入原来的前端改造计划，重新整理计划和当前状态”的反馈，更新阶段计划和状态快照。
+- 结果：新增 Phase 6“配置后端生效链路”和 Phase 7“配置链路接入生成工作流”；新增“14.1 当前状态快照”，明确已完成、部分完成、未完成和下一阶段建议顺序；把用户级个人配置 API、个人配置保存、个人 API Key 加密、`force_global_default`、能力级继承、配置 resolver、Codex/订阅能力状态、生成/导出工作流接入全部纳入后续计划。
+- 验证：`git diff --check -- docs/design/guangfu-zhicheng-design.md` 通过；`rg` 确认 Phase 6、Phase 7、当前状态快照、`force_global_default`、配置 resolver、用户级个人配置等关键项已写入文档。
+- 遗留：计划已整理，尚未开始 Phase 6 后端实现。
+- 下一步：从 Phase 6 开始实现后端 schema/API/resolver，并把前端个人配置保存接入后端。
+
+### 2026-07-01 15:00 - Phase 6 配置后端生效链路启动
+
+- 范围：`backend/`、`frontend/src/pages/Settings.tsx`、`docs/design/guangfu-zhicheng-design.md`。
+- 动作：按计划推进 Phase 6；先盘点现有全局设置、用户鉴权、数据库模型、设置 API 和生成链路调用方式，再实现用户级个人配置 API 与 resolver。
+- 计划状态：
+  - 进行中：后端设置/用户/鉴权/生成调用盘点。
+  - 待开始：用户级个人配置 schema/API。
+  - 待开始：配置 resolver。
+  - 待开始：前端个人配置保存/读取接入。
+  - 待开始：服务测试改为当前生效配置。
+- 结果：进行中。
+- 验证：待完成本步骤后执行后端/前端相关测试和 `git diff --check`。
+- 遗留：必须避免混入已有可编辑 PPTX 流水线未提交改动；如需修改同一后端文件，先确认现有 diff。
+- 下一步：盘点 `backend/controllers/settings_controller.py`、用户模型/鉴权、设置模型与生成服务调用入口。
+
+### 2026-07-01 15:10 - Phase 6 后端设置链路盘点完成
+
+- 范围：`backend/controllers/settings_controller.py`、`backend/controllers/auth_controller.py`、`backend/models/settings.py`、`backend/models/user_settings.py`、`backend/utils/auth.py`。
+- 动作：盘点全局设置、个人设置、鉴权和当前 API 分布；确认现有全局设置走 `/api/settings` 且要求管理员，个人设置雏形走 `/api/auth/personal-settings` 且要求登录，用户上下文由 `require_auth` / `require_admin` 写入 `g.current_user`。
+- 结果：现有 `UserSettings` 已支持 `api_key`、`api_base_url`、`text_model`、`image_model`、`image_caption_model`、`text_model_source`、`image_model_source`，但缺少与全局配置同构的字段、`force_global_default`、能力级 `use_global_default`、`image_caption_model_source`、分模型 API Key/Base、OpenAI 图片协议、LazyLLM Key 信息、个人配置 reset、统一 effective config resolver、账号/订阅连接能力状态。`Settings.to_dict()` 已有全局敏感值长度输出和 OpenAI OAuth 连接状态，可作为 resolver 的全局层输入。
+- 计划状态：
+  - 已完成：后端设置/用户/鉴权/生成调用入口初步盘点。
+  - 进行中：用户级个人配置 schema/API。
+  - 待开始：配置 resolver。
+  - 待开始：前端个人配置保存/读取接入。
+  - 待开始：服务测试改为当前生效配置。
+- 验证：本步骤为代码盘点，已通过 `sed`/`rg` 确认相关文件结构；尚未改业务代码。
+- 遗留：生成链路接入点较多，Phase 6 先做设置存储和 effective resolver；Phase 7 再逐步替换生成/导出任务里的全局 `Settings.get_settings()` 读取方式。
+- 下一步：扩展 `UserSettings` 与个人设置 API，先让用户能保存/清空/读取同构配置，并保留敏感字段只返回长度。
+
+### 2026-07-01 15:25 - 用户个人配置 schema/API 第一片完成
+
+- 范围：`backend/models/user_settings.py`、`backend/controllers/auth_controller.py`、`backend/migrations/versions/021_expand_user_settings_config.py`、`docs/design/guangfu-zhicheng-design.md`。
+- 动作：扩展 `UserSettings` 字段，补齐 `force_global_default`、`ai_provider_format`、三类模型来源、三类分模型 API Key/Base、`openai_image_api_protocol`、`lazyllm_api_keys`、`capability_overrides`；新增迁移；扩展 `/api/auth/personal-settings` 的 `GET/PUT` 数据结构；新增 `/api/auth/personal-settings/reset` 用于清空个人覆盖并回退全局。
+- 结果：个人配置后端已能保存与全局配置同构的核心模型/凭据字段；空字符串按“清除个人覆盖，继承全局”处理；敏感字段只返回长度和 vendor key 信息，不返回明文；Codex/provider 选择允许保存，真实可执行状态留给 resolver 计算。
+- 计划状态：
+  - 已完成：后端设置/用户/鉴权/生成调用入口初步盘点。
+  - 已完成：用户级个人配置 schema/API 第一片。
+  - 进行中：配置 resolver。
+  - 待开始：前端个人配置保存/读取接入。
+  - 待开始：服务测试改为当前生效配置。
+- 验证：待完成 resolver 后统一运行后端测试和 `git diff --check`。
+- 遗留：尚未把个人配置接入 `app.config` 或生成流水线；个人 API Key 加密存储本片仍沿用现有 Settings 的明文数据库模式，后续需要单独加密改造；迁移链需在测试阶段确认 Alembic head 是否需要 merge。
+- 下一步：实现 effective config resolver，返回每个能力的生效来源、执行方式、是否可用和不可用原因。
+
+### 2026-07-01 15:40 - effective config resolver 第一片完成
+
+- 范围：`backend/services/settings_resolver.py`、`backend/controllers/settings_controller.py`、`docs/design/guangfu-zhicheng-design.md`。
+- 动作：新增统一配置解析 service，按 `系统默认 -> 全局配置 -> 用户个人配置 -> 能力级继承 -> 当前生效值` 计算模型、Provider、API Base、凭据来源和能力状态；新增 `GET /api/settings/effective`，使用登录态返回当前用户的全局、个人、账号连接和能力矩阵。
+- 结果：后端可返回 `outline`、`description`、`natural_edit`、`image_caption`、`image_generation`、`pptx_generation`、`editable_pptx_visual`、`editable_pptx_element`、`export_queue` 的 `execution_mode`、`subscription_supported`、`api_required`、`ready`、`reason`、`use_global_default`；文本类能力允许账号/订阅路径，图片生成、PPTX、可编辑 PPTX 和导出任务队列标记为 API 必需；Codex 未连接或 API 必需能力选择 Codex 时会给出不可用原因。
+- 计划状态：
+  - 已完成：后端设置/用户/鉴权/生成调用入口初步盘点。
+  - 已完成：用户级个人配置 schema/API 第一片。
+  - 已完成：配置 resolver 第一片。
+  - 进行中：前端个人配置保存/读取接入。
+  - 待开始：服务测试改为当前生效配置。
+- 验证：待接入前端后统一运行后端单测、前端构建和 `git diff --check`。
+- 遗留：resolver 暂未接项目覆盖层和生成流水线实际调用；个人 OpenAI/Codex OAuth 尚未做到用户级隔离，目前账号连接状态复用全局 `Settings` 中的 OpenAI OAuth 状态；个人凭据仍需加密存储。
+- 下一步：接入 `Settings.tsx`，让个人配置页读取 `/api/auth/personal-settings` 和 `/api/settings/effective`，保存个人配置时写回个人接口。
+
+### 2026-07-01 16:05 - 前端个人配置读写与生效链路展示接入
+
+- 范围：`frontend/src/api/endpoints.ts`、`frontend/src/types/index.ts`、`frontend/src/pages/Settings.tsx`、`docs/design/guangfu-zhicheng-design.md`。
+- 动作：新增前端 `PersonalSettings`、`EffectiveSettings` 类型；新增 `getPersonalSettings`、`updatePersonalSettings`、`resetPersonalSettings`、`getEffectiveSettings` API；`Settings.tsx` 加载全局、个人、effective 三类配置；全局/个人二级入口切换时分别展示对应表单数据；个人页保存走 `/api/auth/personal-settings`，重置走 `/api/auth/personal-settings/reset`；覆盖链路展示 resolver 返回的能力矩阵。
+- 结果：个人配置不再只是前端预览，模型字段、Provider、API Key/Base、强制全局、能力级继承可以写入当前用户配置；个人页的密钥长度、账号连接状态、已配置数量和能力可用性按 `displaySettings/effectiveSettings` 显示；大纲/描述/自然语言修改展示为可走账号/订阅，图片生成、PPTX、可编辑 PPTX 和导出队列展示 API 必需。
+- 计划状态：
+  - 已完成：后端设置/用户/鉴权/生成调用入口初步盘点。
+  - 已完成：用户级个人配置 schema/API 第一片。
+  - 已完成：配置 resolver 第一片。
+  - 已完成：前端个人配置保存/读取与生效来源展示第一片。
+  - 进行中：测试验证与问题修复。
+- 验证：待运行前端 build/test、后端相关单测和 `git diff --check`。
+- 遗留：服务测试仍使用当前表单临时覆盖调用，尚未改为先走 effective resolver；生成工作流仍未接 resolver；个人配置页中生成策略、文件解析、语音等未纳入个人 schema 的字段仍会继承全局。
+- 下一步：运行验证，修复编译/测试问题；随后做服务测试接入 effective config 或进入 Phase 7 工作流接入。
+
+### 2026-07-01 16:25 - Phase 6 第一轮验证完成
+
+- 范围：`backend/models/user_settings.py`、`backend/controllers/auth_controller.py`、`backend/controllers/settings_controller.py`、`backend/services/settings_resolver.py`、`backend/migrations/versions/021_expand_user_settings_config.py`、`backend/tests/unit/test_personal_settings_effective_config.py`、`frontend/src/api/endpoints.ts`、`frontend/src/types/index.ts`、`frontend/src/pages/Settings.tsx`、`docs/design/guangfu-zhicheng-design.md`。
+- 动作：补充后端单测，覆盖个人配置保存不回显明文、个人配置 reset、Codex + API 必需能力在 effective config 中返回不可用原因；运行前端品牌守卫、回归测试、生产构建、后端 py_compile、设置相关单测、Alembic head 检查和 diff 空白检查。
+- 结果：Phase 6 第一轮“个人配置存储 + effective resolver + 前端读写展示”完成；迁移链当前为单 head `021_expand_user_settings_config`；前端个人配置页已不再停留在纯预览状态，保存/重置会写后端并刷新能力矩阵。
+- 计划状态：
+  - 已完成：后端设置/用户/鉴权/生成调用入口初步盘点。
+  - 已完成：用户级个人配置 schema/API 第一片。
+  - 已完成：配置 resolver 第一片。
+  - 已完成：前端个人配置保存/读取与生效来源展示第一片。
+  - 已完成：测试验证与问题修复。
+  - 待开始：服务测试改为基于 effective config 的当前生效配置。
+  - 待开始：Phase 7 生成/导出工作流接入 resolver。
+- 验证：`npm run guard:brand` 通过；`npm run test:run -- src/tests/branding-workbench-regression.test.ts` 通过，2 tests passed；`npm run build` 通过；`python3 -m py_compile backend/models/user_settings.py backend/controllers/auth_controller.py backend/controllers/settings_controller.py backend/services/settings_resolver.py` 通过；`uv run --python 3.13 pytest backend/tests/unit/test_personal_settings_effective_config.py -q` 通过，3 tests passed；`uv run --python 3.13 pytest backend/tests/unit/test_api_settings_provider.py backend/tests/unit/test_personal_settings_effective_config.py -q` 通过，13 tests passed；`uv run --python 3.13 alembic heads` 返回 `021_expand_user_settings_config (head)`；`git diff --check` 通过。
+- 遗留：个人 API Key 加密存储仍未做；个人 OAuth/Codex 登录态仍复用全局 OAuth，不是用户级隔离；服务测试仍是表单临时覆盖，没有统一走 resolver；生成大纲/描述/自然语言修改、图片生成、可编辑 PPTX、导出任务队列还没接入 resolver；工作区仍存在之前可编辑 PPTX 流水线相关未提交改动，本轮未回滚。
+- 下一步：建议先做“服务测试接入 effective config”，让设置页验证结果和实际生效链路一致；之后进入 Phase 7，把大纲/描述/自然语言修改和 PPTX/图片/导出工作流逐步切到 resolver。

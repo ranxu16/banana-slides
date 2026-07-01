@@ -66,15 +66,30 @@ def app():
 
 @pytest.fixture(scope='function')
 def client(app):
-    """创建测试客户端"""
+    """创建默认已登录管理员的测试客户端。
+
+    多用户改造后大多数 API 都要求 JWT。历史单元测试默认关注业务行为，
+    因此这里为普通 client 注入管理员身份；需要测试未登录场景时可显式传
+    `headers={'Authorization': ''}` 覆盖。
+    """
     with app.test_client() as test_client:
         with app.app_context():
-            from models import db
+            from models import User, db
+            from utils.auth import generate_token
             # 清理旧数据，保持测试隔离
             db.session.rollback()
             for table in reversed(db.metadata.sorted_tables):
                 db.session.execute(table.delete())
             db.session.commit()
+            user = User(
+                username='test-admin',
+                password_hash='test',
+                is_admin=True,
+                is_active=True,
+            )
+            db.session.add(user)
+            db.session.commit()
+            test_client.environ_base['HTTP_AUTHORIZATION'] = f'Bearer {generate_token(user.id)}'
             yield test_client
             db.session.rollback()
 

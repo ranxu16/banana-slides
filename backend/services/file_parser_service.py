@@ -25,7 +25,7 @@ def _get_ai_provider_format(provider_format: str = None) -> str:
         1. Provided provider_format parameter
         2. Flask app.config['AI_PROVIDER_FORMAT'] (from database settings)
         3. Environment variable AI_PROVIDER_FORMAT
-        4. Default: 'gemini'
+        4. Default: 'openai'
     
     Args:
         provider_format: Optional provider format string. If not provided, reads from Flask config or environment variable.
@@ -45,7 +45,7 @@ def _get_ai_provider_format(provider_format: str = None) -> str:
         pass
     
     # Fallback to environment variable
-    return os.getenv('AI_PROVIDER_FORMAT', 'gemini').lower()
+    return os.getenv('AI_PROVIDER_FORMAT', 'openai').lower()
 
 
 class FileParserService:
@@ -54,7 +54,7 @@ class FileParserService:
     def __init__(self, mineru_token: str, mineru_api_base: str = "https://mineru.net",
                  google_api_key: str = "", google_api_base: str = "",
                  openai_api_key: str = "", openai_api_base: str = "",
-                 image_caption_model: str = "gemini-3-flash-preview",
+                 image_caption_model: str = None,
                  lazyllm_image_caption_source: str = "", 
                  provider_format: str = None,
                  mineru_model_version: str = "vlm",
@@ -80,8 +80,13 @@ class FileParserService:
         self.get_upload_url_api = f"{mineru_api_base}/api/v4/file-urls/batch"
         self.get_result_api_template = f"{mineru_api_base}/api/v4/extract-results/batch/{{}}"
         
-        self._image_caption_model = image_caption_model
         self._provider_format = _get_ai_provider_format(provider_format)
+        if image_caption_model:
+            self._image_caption_model = image_caption_model
+        elif self._provider_format == "gemini":
+            self._image_caption_model = "gemini-3-flash-preview"
+        else:
+            self._image_caption_model = "gpt-5.5"
         self._caption_provider = None
     
     def _get_caption_provider(self):

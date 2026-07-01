@@ -47,8 +47,8 @@ class Config:
     GOOGLE_API_KEY = os.getenv('GOOGLE_API_KEY', '')
     GOOGLE_API_BASE = os.getenv('GOOGLE_API_BASE', '')
     
-    # Provider format: gemini | openai | vertex | lazyllm
-    AI_PROVIDER_FORMAT = os.getenv('AI_PROVIDER_FORMAT', 'gemini')
+    # Provider format: openai | gemini | vertex | lazyllm
+    AI_PROVIDER_FORMAT = os.getenv('AI_PROVIDER_FORMAT', 'openai')
 
     # Google Cloud Vertex AI (requires AI_PROVIDER_FORMAT=vertex)
     VERTEX_PROJECT_ID = os.getenv('VERTEX_PROJECT_ID', '')
@@ -89,15 +89,15 @@ class Config:
     IMAGE_CAPTION_API_BASE = os.getenv('IMAGE_CAPTION_API_BASE', '')
     
     # AI 模型配置
-    TEXT_MODEL = os.getenv('TEXT_MODEL', 'gemini-3-flash-preview')
-    IMAGE_MODEL = os.getenv('IMAGE_MODEL', 'gemini-3-pro-image-preview')
+    TEXT_MODEL = os.getenv('TEXT_MODEL', 'gpt-5.5')
+    IMAGE_MODEL = os.getenv('IMAGE_MODEL', 'gpt-image-2')
 
     # MinerU 文件解析服务配置
     MINERU_TOKEN = os.getenv('MINERU_TOKEN', '')
     MINERU_API_BASE = os.getenv('MINERU_API_BASE', 'https://mineru.net')
     
     # 图片识别模型配置
-    IMAGE_CAPTION_MODEL = os.getenv('IMAGE_CAPTION_MODEL', 'gemini-3-flash-preview')
+    IMAGE_CAPTION_MODEL = os.getenv('IMAGE_CAPTION_MODEL', 'gpt-5.5')
     
     # 并发配置
     MAX_DESCRIPTION_WORKERS = int(os.getenv('MAX_DESCRIPTION_WORKERS', '20'))

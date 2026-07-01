@@ -59,9 +59,9 @@ def _generate_image_caption(filepath: str) -> str:
         else:
             prompt = "请用一句简短的中文描述这张图片的主要内容。只返回描述文字，不要其他解释。"
 
-        provider_format = (current_app.config.get('AI_PROVIDER_FORMAT') or 'gemini').lower()
+        provider_format = (current_app.config.get('AI_PROVIDER_FORMAT') or 'openai').lower()
         caption_source = (current_app.config.get('IMAGE_CAPTION_MODEL_SOURCE') or '').lower()
-        caption_model = current_app.config.get('IMAGE_CAPTION_MODEL', 'gemini-3-flash-preview')
+        caption_model = current_app.config.get('IMAGE_CAPTION_MODEL', 'gpt-5.5')
 
         # Determine effective format: per-model source overrides global
         effective_format = caption_source or provider_format

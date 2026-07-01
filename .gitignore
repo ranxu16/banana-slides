@@ -37,6 +37,7 @@
 !README.md
 !skills/**/*.md
 # !docs/**/*.md
+!docs/design/**/*.md
 !docs/specs/cli-spec.md
 !docs/superpowers/specs/*.md
 !docs/superpowers/plans/*.md

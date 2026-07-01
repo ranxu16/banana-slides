@@ -172,7 +172,15 @@ class TestResourceConcurrency:
 
             db.session.commit()
 
+            from models import User
+            from utils.auth import generate_token
+
+            user = User(username='concurrency-admin', password_hash='test', is_admin=True, is_active=True)
+            db.session.add(user)
+            db.session.commit()
+
             client = app.test_client()
+            client.environ_base['HTTP_AUTHORIZATION'] = f'Bearer {generate_token(user.id)}'
             task_ids = []
 
             def fake_save_image_with_version(_image, _project_id, _page_id, _file_service, page_obj=None, image_format='PNG'):

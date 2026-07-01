@@ -85,7 +85,7 @@ def test_update_settings_accepts_lazyllm_provider():
             with patch('controllers.settings_controller.Settings.get_settings', return_value=settings):
                 with patch('controllers.settings_controller.db.session.commit'):
                     with patch('controllers.settings_controller._sync_settings_to_config'):
-                        response, status_code = update_settings()
+                        response, status_code = update_settings.__wrapped__()
 
     assert status_code == 200
     data = response.get_json()
@@ -109,7 +109,7 @@ def test_verify_uses_configured_text_model():
         with app.test_request_context('/api/settings/verify', method='POST'):
             with patch('controllers.settings_controller.Settings.get_settings', return_value=settings):
                 with patch('services.ai_providers.get_text_provider', return_value=mock_provider) as mock_get_provider:
-                    response, status_code = verify_api_key()
+                    response, status_code = verify_api_key.__wrapped__()
 
     assert status_code == 200
     data = response.get_json()

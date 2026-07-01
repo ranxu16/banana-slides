@@ -207,3 +207,53 @@ export interface Settings {
   created_at?: string;
   updated_at?: string;
 }
+
+export interface PersonalSettings {
+  force_global_default: boolean;
+  ai_provider_format?: string;
+  api_base_url?: string;
+  api_key_length?: number;
+  text_model?: string;
+  image_model?: string;
+  image_caption_model?: string;
+  text_model_source?: string;
+  image_model_source?: string;
+  image_caption_model_source?: string;
+  lazyllm_api_keys_info?: Record<string, number>;
+  text_api_key_length?: number;
+  text_api_base_url?: string;
+  image_api_key_length?: number;
+  image_api_base_url?: string;
+  image_caption_api_key_length?: number;
+  image_caption_api_base_url?: string;
+  openai_image_api_protocol?: string;
+  capability_overrides?: Record<string, { use_global_default?: boolean }>;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface EffectiveCapabilityConfig {
+  key: string;
+  label: string;
+  execution_mode: 'api' | 'account_subscription' | 'unconfigured' | string;
+  subscription_supported: boolean;
+  api_required: boolean;
+  ready: boolean;
+  reason?: string;
+  use_global_default: boolean;
+  model?: { value?: string; source?: string };
+  provider?: { value?: string; source?: string };
+  credential?: { length?: number; source?: string; configured?: boolean };
+}
+
+export interface EffectiveSettings {
+  source_order: string[];
+  global: Settings;
+  personal: PersonalSettings | null;
+  account_status: {
+    openai_oauth_connected: boolean;
+    openai_oauth_account_id?: string | null;
+    codex_available: boolean;
+  };
+  capabilities: Record<string, EffectiveCapabilityConfig>;
+}

@@ -308,7 +308,7 @@ import { Button, Input, Loading, Modal, useToast, ToastContainer, useConfirm } f
 import * as api from '@/api/endpoints';
 import type { OutputLanguage, UpdateCheckInfo } from '@/api/endpoints';
 import { OUTPUT_LANGUAGE_OPTIONS } from '@/api/endpoints';
-import type { Settings as SettingsType } from '@/types';
+import type { EffectiveSettings, PersonalSettings, Settings as SettingsType } from '@/types';
 
 // 配置项类型定义
 type FieldType = 'text' | 'password' | 'number' | 'select' | 'buttons' | 'switch';
@@ -340,6 +340,39 @@ interface ServiceTestState {
   message?: string;
   detail?: string;
 }
+
+type SettingsScope = 'global' | 'personal';
+
+type PersonalPreferenceMode = 'auto' | 'global';
+
+type PersonalCapabilityMode = 'subscription' | 'global-api' | 'personal-api' | 'enterprise-proxy';
+
+interface PersonalConfigState {
+  mode: PersonalPreferenceMode;
+  outline: PersonalCapabilityMode;
+  description: PersonalCapabilityMode;
+  naturalEdit: PersonalCapabilityMode;
+  image: PersonalCapabilityMode;
+  editablePptx: PersonalCapabilityMode;
+  elementGeneration: PersonalCapabilityMode;
+}
+
+const personalModeLabels: Record<PersonalCapabilityMode, string> = {
+  subscription: 'ChatGPT Team 订阅',
+  'global-api': '继承全局 API',
+  'personal-api': '个人 API',
+  'enterprise-proxy': '企业代理',
+};
+
+const defaultPersonalConfig: PersonalConfigState = {
+  mode: 'auto',
+  outline: 'subscription',
+  description: 'subscription',
+  naturalEdit: 'subscription',
+  image: 'global-api',
+  editablePptx: 'enterprise-proxy',
+  elementGeneration: 'global-api',
+};
 
 // LazyLLM 支持的厂商列表
 const LAZYLLM_SOURCES = [
@@ -576,7 +609,7 @@ export const SettingsAbout: React.FC<{ t: SettingsTranslator }> = ({ t }) => {
   );
 };
 
-const formDataFromSettings = (data: SettingsType): typeof initialFormData => ({
+const formDataFromSettings = (data: Partial<SettingsType & PersonalSettings>): typeof initialFormData => ({
   ai_provider_format: resolveLazyllmVendor(data.ai_provider_format || 'gemini', data.lazyllm_api_keys_info),
   api_base_url: data.api_base_url || '',
   api_key: '',
@@ -631,6 +664,8 @@ export const Settings: React.FC = () => {
   };
 
   const [settings, setSettings] = useState<SettingsType | null>(null);
+  const [personalSettings, setPersonalSettings] = useState<PersonalSettings | null>(null);
+  const [effectiveSettings, setEffectiveSettings] = useState<EffectiveSettings | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [formData, setFormData] = useState(initialFormData);
@@ -640,6 +675,20 @@ export const Settings: React.FC = () => {
   const [manualCallbackOpen, setManualCallbackOpen] = useState(false);
   const [manualCallbackSubmitting, setManualCallbackSubmitting] = useState(false);
   const [advancedOpen, setAdvancedOpen] = useState(false);
+  const [activeScope, setActiveScope] = useState<SettingsScope>('personal');
+  const [personalConfig, setPersonalConfig] = useState<PersonalConfigState>(defaultPersonalConfig);
+  const [personalDirty, setPersonalDirty] = useState(false);
+
+  const updatePersonalConfig = <K extends keyof PersonalConfigState>(key: K, value: PersonalConfigState[K]) => {
+    setPersonalConfig(prev => ({ ...prev, [key]: value }));
+    setPersonalDirty(true);
+  };
+
+  const forceUseGlobalDefault = () => {
+    setPersonalConfig(prev => ({ ...prev, mode: 'global' }));
+    setPersonalDirty(true);
+    show({ message: '已切换为强制使用全局默认，保存后对当前用户生效', type: 'info' });
+  };
 
   const handleOAuthLogin = async () => {
     setOauthConnecting(true);
@@ -657,12 +706,13 @@ export const Settings: React.FC = () => {
             setOauthConnecting(false);
             if (event.data.success) {
               const statusResp = await api.getOpenAIOAuthStatus();
-      if (statusResp.success && statusResp.data) {
+              if (statusResp.success && statusResp.data) {
         setSettings(prev => prev ? {
           ...prev,
           openai_oauth_connected: statusResp.data!.connected,
           openai_oauth_account_id: statusResp.data!.account_id || null,
         } : prev);
+        reloadEffectiveSettings();
       }
             } else {
               show({ message: t('settings.openaiOAuth.connectFailed'), type: 'error' });
@@ -693,6 +743,7 @@ export const Settings: React.FC = () => {
           openai_oauth_connected: false,
           openai_oauth_account_id: null,
         } : prev);
+        await reloadEffectiveSettings();
         show({ message: t('settings.openaiOAuth.disconnectSuccess'), type: 'success' });
       }
     } catch {
@@ -715,6 +766,7 @@ export const Settings: React.FC = () => {
             openai_oauth_connected: statusResp.data!.connected,
             openai_oauth_account_id: statusResp.data!.account_id || null,
           } : prev);
+          await reloadEffectiveSettings();
         }
         show({ message: t('settings.openaiOAuth.manualCallbackSuccess'), type: 'success' });
       } else {
@@ -883,14 +935,49 @@ export const Settings: React.FC = () => {
     loadSettings();
   }, []);
 
+  useEffect(() => {
+    if (!settings) return;
+    if (activeScope === 'personal') {
+      setFormData(formDataFromSettings(personalSettings ? { ...settings, ...personalSettings } : settings));
+      setPersonalConfig(prev => ({
+        ...prev,
+        mode: personalSettings?.force_global_default ? 'global' : 'auto',
+      }));
+    } else {
+      setFormData(formDataFromSettings(settings));
+    }
+  }, [activeScope, settings, personalSettings]);
+
   const loadSettings = async () => {
     setIsLoading(true);
     try {
-      const response = await api.getSettings();
-      if (response.data) {
-        setSettings(response.data);
-        setFormData(formDataFromSettings(response.data));
-        sessionStorage.setItem('banana-settings', JSON.stringify(response.data));
+      const [settingsResponse, personalResponse, effectiveResponse] = await Promise.all([
+        api.getSettings(),
+        api.getPersonalSettings().catch((error) => {
+          console.warn('加载个人配置失败:', error);
+          return null;
+        }),
+        api.getEffectiveSettings().catch((error) => {
+          console.warn('加载生效配置失败:', error);
+          return null;
+        }),
+      ]);
+      const globalData = settingsResponse.data;
+      if (globalData) {
+        setSettings(globalData);
+        sessionStorage.setItem('banana-settings', JSON.stringify(globalData));
+        const personalData = personalResponse?.data || null;
+        setPersonalSettings(personalData);
+        setEffectiveSettings(effectiveResponse?.data || null);
+        setPersonalConfig(prev => ({
+          ...prev,
+          mode: personalData?.force_global_default ? 'global' : 'auto',
+        }));
+        setFormData(formDataFromSettings(
+          activeScope === 'personal' && personalData
+            ? { ...globalData, ...personalData }
+            : globalData
+        ));
       }
     } catch (error: any) {
       console.error('加载设置失败:', error);
@@ -900,6 +987,15 @@ export const Settings: React.FC = () => {
       });
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const reloadEffectiveSettings = async () => {
+    try {
+      const response = await api.getEffectiveSettings();
+      setEffectiveSettings(response.data || null);
+    } catch (error) {
+      console.warn('刷新生效配置失败:', error);
     }
   };
 
@@ -924,7 +1020,7 @@ export const Settings: React.FC = () => {
         text_api_key, image_api_key, image_caption_api_key,
         ...otherData
       } = formData;
-      const payload: Parameters<typeof api.updateSettings>[0] = {
+      const payload: any = {
         ...otherData,
         ai_provider_format: otherData.ai_provider_format,
       };
@@ -946,10 +1042,36 @@ export const Settings: React.FC = () => {
         payload.lazyllm_api_keys = nonEmptyKeys;
       }
 
-      const response = await api.updateSettings(payload);
+      const response = activeScope === 'personal'
+        ? await api.updatePersonalSettings({
+          ...payload,
+          force_global_default: personalConfig.mode === 'global',
+          capability_overrides: {
+            outline: { use_global_default: personalConfig.mode === 'global' || personalConfig.outline === 'global-api' },
+            description: { use_global_default: personalConfig.mode === 'global' || personalConfig.description === 'global-api' },
+            natural_edit: { use_global_default: personalConfig.mode === 'global' || personalConfig.naturalEdit === 'global-api' },
+            image_generation: { use_global_default: personalConfig.mode === 'global' || personalConfig.image === 'global-api' },
+            editable_pptx_visual: { use_global_default: personalConfig.mode === 'global' || personalConfig.editablePptx === 'global-api' },
+            editable_pptx_element: { use_global_default: personalConfig.mode === 'global' || personalConfig.elementGeneration === 'global-api' },
+          },
+        })
+        : await api.updateSettings(payload);
+
       if (response.data) {
-        setSettings(response.data);
-        sessionStorage.setItem('banana-settings', JSON.stringify(response.data));
+        if (activeScope === 'personal') {
+          const nextPersonal = response.data as PersonalSettings;
+          setPersonalSettings(nextPersonal);
+          if (settings) {
+            setFormData(formDataFromSettings({ ...settings, ...nextPersonal }));
+          }
+          setPersonalDirty(false);
+          await reloadEffectiveSettings();
+        } else {
+          const nextSettings = response.data as SettingsType;
+          setSettings(nextSettings);
+          sessionStorage.setItem('banana-settings', JSON.stringify(nextSettings));
+          await reloadEffectiveSettings();
+        }
         show({ message: t('settings.messages.saveSuccess'), type: 'success' });
         show({ message: t('settings.messages.testServiceTip'), type: 'info' });
         // Clear all sensitive fields after save
@@ -977,10 +1099,23 @@ export const Settings: React.FC = () => {
       async () => {
         setIsSaving(true);
         try {
+          if (activeScope === 'personal') {
+            await api.resetPersonalSettings();
+            setPersonalSettings(null);
+            setPersonalConfig(defaultPersonalConfig);
+            setPersonalDirty(false);
+            if (settings) {
+              setFormData(formDataFromSettings(settings));
+            }
+            await reloadEffectiveSettings();
+            show({ message: '个人配置已清空，将使用全局默认配置', type: 'success' });
+            return;
+          }
           const response = await api.resetSettings();
           if (response.data) {
             setSettings(response.data);
             setFormData(formDataFromSettings(response.data));
+            await reloadEffectiveSettings();
             show({ message: t('settings.messages.resetSuccess'), type: 'success' });
           }
         } catch (error: any) {
@@ -1004,6 +1139,9 @@ export const Settings: React.FC = () => {
 
   const handleFieldChange = (key: string, value: any) => {
     setFormData(prev => ({ ...prev, [key]: value }));
+    if (activeScope === 'personal') {
+      setPersonalDirty(true);
+    }
   };
 
   const updateServiceTest = (key: string, nextState: ServiceTestState) => {
@@ -1117,6 +1255,17 @@ export const Settings: React.FC = () => {
     }
   };
 
+  const displaySettings = settings
+    ? ({
+      ...settings,
+      ...(activeScope === 'personal' && personalSettings ? personalSettings : {}),
+      openai_oauth_connected: effectiveSettings?.account_status.openai_oauth_connected ?? settings.openai_oauth_connected,
+      openai_oauth_account_id: effectiveSettings?.account_status.openai_oauth_account_id ?? settings.openai_oauth_account_id,
+    } as SettingsType)
+    : null;
+  const accountConnected = Boolean(displaySettings?.openai_oauth_connected);
+  const accountId = displaySettings?.openai_oauth_account_id || '';
+
   const renderField = (field: FieldConfig) => {
     const value = formData[field.key] as string | number | boolean;
 
@@ -1213,8 +1362,8 @@ export const Settings: React.FC = () => {
     }
 
     // text, password, number 类型
-    const placeholder = field.sensitiveField && settings && field.lengthKey && (settings[field.lengthKey] as number) > 0
-      ? t('settings.fields.apiKeySet', { length: settings[field.lengthKey] as string | number })
+    const placeholder = field.sensitiveField && displaySettings && field.lengthKey && (displaySettings[field.lengthKey] as number) > 0
+      ? t('settings.fields.apiKeySet', { length: displaySettings[field.lengthKey] as string | number })
       : field.placeholder || '';
 
     // 判断是否禁用（思考负载字段在对应开关关闭时禁用）
@@ -1325,18 +1474,19 @@ export const Settings: React.FC = () => {
           >
             <option value="">{t('settings.fields.modelProviderPlaceholder')}</option>
             {ALL_PROVIDER_SOURCES.map((option) => (
-              <option
-                key={option.value}
-                value={option.value}
-                disabled={option.value === 'codex' && !settings?.openai_oauth_connected}
-              >
-                {option.label}{option.value === 'codex' && !settings?.openai_oauth_connected ? ` (${t('settings.openaiOAuth.disconnected')})` : ''}
+              <option key={option.value} value={option.value}>
+                {option.label}{option.value === 'codex' && !accountConnected ? '（需连接账号）' : ''}
               </option>
             ))}
           </select>
           <p className="mt-1 text-sm text-gray-500 dark:text-foreground-tertiary">
             {t('settings.fields.modelProviderDesc')}
           </p>
+          {sourceValue === 'codex' && !accountConnected && (
+            <p className="mt-1 text-sm font-medium text-amber-700">
+              已选择 Codex。执行前需要在“服务连接”中连接 OpenAI/ChatGPT 账号。
+            </p>
+          )}
         </div>
 
         {/* Gemini/OpenAI 提供商：显示 API Base URL + API Key */}
@@ -1354,8 +1504,8 @@ export const Settings: React.FC = () => {
                 label={t('settings.fields.perModelApiKey')}
                 type="password"
                 placeholder={
-                  settings && (settings[item.apiKeyLengthKey] as number) > 0
-                    ? t('settings.fields.perModelApiKeySet', { length: settings[item.apiKeyLengthKey] as number })
+                  displaySettings && (displaySettings[item.apiKeyLengthKey] as number) > 0
+                    ? t('settings.fields.perModelApiKeySet', { length: displaySettings[item.apiKeyLengthKey] as number })
                     : t('settings.fields.perModelApiKeyPlaceholder')
                 }
                 value={formData[item.apiKeyKey] as string}
@@ -1392,7 +1542,7 @@ export const Settings: React.FC = () => {
         {/* LazyLLM 厂商：显示厂商 API Key */}
         {isLazyllm && (() => {
           const vendorLabel = LAZYLLM_SOURCES.find(s => s.value === sourceValue)?.label || sourceValue.toUpperCase();
-          const keyLength = settings?.lazyllm_api_keys_info?.[sourceValue] || 0;
+          const keyLength = displaySettings?.lazyllm_api_keys_info?.[sourceValue] || 0;
           const placeholder = keyLength > 0
             ? t('settings.fields.vendorApiKeySet', { length: keyLength })
             : t('settings.fields.vendorApiKeyPlaceholder', { vendor: vendorLabel });
@@ -1408,6 +1558,9 @@ export const Settings: React.FC = () => {
                     ...prev,
                     lazyllm_api_keys: { ...prev.lazyllm_api_keys, [sourceValue]: e.target.value }
                   }));
+                  if (activeScope === 'personal') {
+                    setPersonalDirty(true);
+                  }
                 }}
               />
               <p className="mt-1 text-sm text-gray-500 dark:text-foreground-tertiary">
@@ -1422,14 +1575,17 @@ export const Settings: React.FC = () => {
 
   const providerLabel = ALL_PROVIDER_SOURCES.find((source) => source.value === formData.ai_provider_format)?.label || formData.ai_provider_format;
   const configuredSecrets = [
-    settings?.api_key_length,
-    settings?.text_api_key_length,
-    settings?.image_api_key_length,
-    settings?.image_caption_api_key_length,
-    settings?.mineru_token_length,
-    settings?.baidu_api_key_length,
-    settings?.elevenlabs_api_key_length,
+    displaySettings?.api_key_length,
+    displaySettings?.text_api_key_length,
+    displaySettings?.image_api_key_length,
+    displaySettings?.image_caption_api_key_length,
+    displaySettings?.mineru_token_length,
+    displaySettings?.baidu_api_key_length,
+    displaySettings?.elevenlabs_api_key_length,
   ].filter((length) => Number(length) > 0).length;
+  const effectiveCapabilityList = effectiveSettings
+    ? Object.values(effectiveSettings.capabilities)
+    : [];
   const configNavItems = [
     { href: '#settings-api', label: '基础配置', description: '默认 Provider、Base URL、密钥' },
     { href: '#settings-models', label: 'AI 模型', description: '文本、图片、视觉理解模型' },
@@ -1458,6 +1614,112 @@ export const Settings: React.FC = () => {
     sectionByTitle(t('settings.sections.imageReasoning')),
   ].filter(Boolean) as SectionConfig[];
 
+  const runTextModelTest = () =>
+    handleServiceTest(
+      'text-model',
+      api.testTextModel,
+      (data: any) => (data?.reply ? t('settings.serviceTest.results.modelReply', { reply: data.reply }) : '')
+    );
+
+  const runImageModelTest = () =>
+    handleServiceTest(
+      'image-model',
+      api.testImageModel,
+      (data: any) => (data?.image_size ? t('settings.serviceTest.results.imageSize', { width: data.image_size[0], height: data.image_size[1] }) : '')
+    );
+
+  const runCaptionModelTest = () =>
+    handleServiceTest(
+      'caption-model',
+      api.testCaptionModel,
+      (data: any) => (data?.caption ? t('settings.serviceTest.results.captionDesc', { caption: data.caption }) : '')
+    );
+
+  const SectionCard: React.FC<{
+    id?: string;
+    title: string;
+    description?: string;
+    action?: React.ReactNode;
+    children: React.ReactNode;
+  }> = ({ id, title, description, action, children }) => (
+    <section id={id} className="rounded-md border border-gray-200 bg-white shadow-sm">
+      <div className="flex flex-col gap-3 border-b border-gray-100 px-5 py-4 md:flex-row md:items-center md:justify-between">
+        <div>
+          <h2 className="text-lg font-semibold text-gray-900">{title}</h2>
+          {description && <p className="mt-1 text-sm text-gray-500">{description}</p>}
+        </div>
+        {action}
+      </div>
+      <div className="p-5">{children}</div>
+    </section>
+  );
+
+  const ActionSelect: React.FC<{
+    value: PersonalCapabilityMode;
+    onChange: (value: PersonalCapabilityMode) => void;
+    allowed: PersonalCapabilityMode[];
+  }> = ({ value, onChange, allowed }) => (
+    <select
+      value={value}
+      onChange={(event) => onChange(event.target.value as PersonalCapabilityMode)}
+      className="h-11 w-full rounded-md border border-amber-300 bg-white px-3 text-sm font-semibold text-gray-900 shadow-sm focus:border-amber-500 focus:outline-none focus:ring-2 focus:ring-amber-200"
+    >
+      {allowed.map((mode) => (
+        <option key={mode} value={mode}>{personalModeLabels[mode]}</option>
+      ))}
+    </select>
+  );
+
+  const CapabilityActionCard: React.FC<{
+    title: string;
+    subtitle: string;
+    badge: string;
+    badgeTone: 'blue' | 'green';
+    value: PersonalCapabilityMode;
+    onChange: (value: PersonalCapabilityMode) => void;
+    allowed: PersonalCapabilityMode[];
+    source: string;
+    fallback?: string;
+    onTest?: () => void;
+    secondaryAction?: React.ReactNode;
+  }> = ({ title, subtitle, badge, badgeTone, value, onChange, allowed, source, fallback, onTest, secondaryAction }) => (
+    <div className="rounded-md border border-amber-200 bg-gradient-to-b from-white to-amber-50/50 p-4">
+      <div className="mb-3 flex items-start justify-between gap-3">
+        <div>
+          <h3 className="text-base font-semibold text-gray-900">{title}</h3>
+          <p className="mt-1 text-xs text-gray-500">{subtitle}</p>
+        </div>
+        <span className={`shrink-0 rounded-full px-2.5 py-1 text-xs font-semibold ${badgeTone === 'blue' ? 'bg-blue-50 text-blue-700 border border-blue-200' : 'bg-emerald-50 text-emerald-700 border border-emerald-200'}`}>
+          {badge}
+        </span>
+      </div>
+      <ActionSelect value={value} onChange={onChange} allowed={allowed} />
+      <div className="mt-3 grid gap-2 text-xs text-gray-600 sm:grid-cols-2">
+        <div>来源：<span className="font-semibold text-gray-900">{source}</span></div>
+        {fallback && <div>回退：<span className="font-semibold text-gray-900">{fallback}</span></div>}
+      </div>
+      <div className="mt-3 flex flex-wrap gap-2">
+        {onTest && (
+          <button
+            type="button"
+            onClick={onTest}
+            className="rounded-md border border-gray-200 bg-white px-3 py-1.5 text-xs font-semibold text-gray-700 hover:border-amber-300 hover:text-amber-700"
+          >
+            测试
+          </button>
+        )}
+        <button
+          type="button"
+          onClick={() => onChange('global-api')}
+          className="rounded-md border border-gray-200 bg-white px-3 py-1.5 text-xs font-semibold text-gray-700 hover:border-amber-300 hover:text-amber-700"
+        >
+          继承全局
+        </button>
+        {secondaryAction}
+      </div>
+    </div>
+  );
+
   if (isLoading) {
     return (
       <div className="flex items-center justify-center py-12">
@@ -1471,6 +1733,375 @@ export const Settings: React.FC = () => {
       <ToastContainer toasts={settingsToasts} onRemove={settingsRemove} />
       {ConfirmDialog}
       <div className="space-y-6">
+        <div className="flex flex-col gap-3 rounded-md border border-gray-200 bg-white p-4 shadow-sm lg:flex-row lg:items-center lg:justify-between">
+          <div>
+            <h1 className="text-2xl font-semibold text-gray-900">全局配置中心</h1>
+            <p className="mt-1 text-sm text-gray-500">管理全局默认与当前用户个人配置。</p>
+          </div>
+          <div className="inline-flex w-full rounded-md border border-gray-200 bg-gray-100 p-1 lg:w-auto">
+            {[
+              { value: 'global' as SettingsScope, label: '全局默认配置' },
+              { value: 'personal' as SettingsScope, label: '个人配置' },
+            ].map((scope) => (
+              <button
+                key={scope.value}
+                type="button"
+                onClick={() => setActiveScope(scope.value)}
+                className={`flex-1 rounded-md px-4 py-2 text-sm font-semibold transition-colors lg:flex-none ${
+                  activeScope === scope.value
+                    ? 'bg-white text-gray-900 shadow-sm'
+                    : 'text-gray-500 hover:text-gray-900'
+                }`}
+              >
+                {scope.label}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {activeScope === 'personal' ? (
+          <>
+            <div className="grid gap-3 lg:grid-cols-[1.2fr_0.8fr_0.8fr]">
+              <div className="rounded-md border border-amber-200 bg-amber-50 p-4">
+                <div className="text-xs font-semibold text-amber-700">当前生效</div>
+                <div className="mt-2 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                  <div>
+                    <div className="text-lg font-semibold text-gray-900">
+                      {personalConfig.mode === 'global' ? '强制使用全局默认' : '个人配置优先'}
+                    </div>
+                    <div className="mt-1 text-sm text-gray-600">
+                      {personalConfig.mode === 'global' ? '所有能力回退到组织默认配置。' : '大纲、描述和自然语言修改优先使用个人账号。'}
+                    </div>
+                  </div>
+                  <Button variant="secondary" size="sm" onClick={forceUseGlobalDefault} icon={<RotateCcw size={16} />}>
+                    强制使用全局默认
+                  </Button>
+                </div>
+              </div>
+              <div className="rounded-md border border-gray-200 bg-white p-4">
+                <div className="text-xs font-medium text-gray-500">账号连接</div>
+                <div className="mt-2 text-lg font-semibold text-gray-900">
+                  {accountConnected ? '已连接' : '未连接'}
+                </div>
+                <div className="mt-1 text-xs text-gray-500">{accountId || '可连接 ChatGPT/OpenAI 账号'}</div>
+              </div>
+              <div className="rounded-md border border-gray-200 bg-white p-4">
+                <div className="text-xs font-medium text-gray-500">回退配置</div>
+                <div className="mt-2 text-lg font-semibold text-gray-900">{providerLabel || 'OpenAI / ChatGPT'}</div>
+                <div className="mt-1 text-xs text-gray-500">个人配置异常时可继续生成</div>
+              </div>
+            </div>
+
+            <div className="grid gap-6 xl:grid-cols-[220px_minmax(0,1fr)]">
+              <aside className="hidden xl:block">
+                <div className="sticky top-24 rounded-md border border-gray-200 bg-white p-3">
+                  <div className="px-2 pb-2 text-xs font-semibold text-gray-500">个人配置</div>
+                  <nav className="space-y-1">
+                    {[
+                      ['#personal-api', '基础配置', '总策略、Provider、回退'],
+                      ['#personal-models', 'AI 模型', '文本、图片、PPTX 工作流'],
+                      ['#personal-generation', '生成策略', '语言、清晰度、并发'],
+                      ['#personal-parsing', '文件解析', '解析与 OCR 依赖'],
+                      ['#personal-service', '服务连接', '账号、密钥、订阅'],
+                      ['#personal-advanced', '兼容高级', '推理与兼容项'],
+                      ['#settings-tests', '服务测试', '主动验证'],
+                      ['#personal-fallback', '覆盖链路', '当前生效来源'],
+                    ].map(([href, label, description]) => (
+                      <a key={href} href={href} className="block rounded-md px-2 py-2 transition-colors hover:bg-amber-50 hover:text-amber-700">
+                        <span className="block text-sm font-semibold text-gray-700">{label}</span>
+                        <span className="mt-0.5 block text-xs leading-5 text-gray-500">{description}</span>
+                      </a>
+                    ))}
+                  </nav>
+                </div>
+              </aside>
+
+              <div className="space-y-5">
+                <SectionCard
+                  id="personal-api"
+                  title="基础配置"
+                  description="当前用户自己的默认策略；未配置或强制回退时使用全局默认。"
+                  action={<Button variant="secondary" size="sm" onClick={forceUseGlobalDefault} icon={<RotateCcw size={16} />}>强制使用全局默认</Button>}
+                >
+                  <div className="space-y-3">
+                    <div className="grid gap-3 rounded-md border border-gray-200 bg-gray-50 p-4 lg:grid-cols-[180px_minmax(0,1fr)_140px] lg:items-center">
+                      <div>
+                        <div className="text-sm font-semibold text-gray-900">个人配置总策略</div>
+                        <div className="text-xs text-gray-500">控制当前用户是否启用个人覆盖</div>
+                      </div>
+                      <select
+                        value={personalConfig.mode}
+                        onChange={(event) => updatePersonalConfig('mode', event.target.value as PersonalPreferenceMode)}
+                        className="h-11 rounded-md border border-amber-300 bg-white px-3 text-sm font-semibold text-gray-900 shadow-sm focus:border-amber-500 focus:outline-none focus:ring-2 focus:ring-amber-200"
+                      >
+                        <option value="auto">自动使用个人配置，失败时回退全局</option>
+                        <option value="global">强制使用全局默认</option>
+                      </select>
+                      <span className="rounded-full border border-amber-200 bg-amber-50 px-3 py-1 text-center text-xs font-semibold text-amber-700">
+                        个人配置
+                      </span>
+                    </div>
+
+                    <div className="grid gap-3 rounded-md border border-gray-200 bg-gray-50 p-4 lg:grid-cols-[180px_minmax(0,1fr)_140px] lg:items-center">
+                      <div>
+                        <div className="text-sm font-semibold text-gray-900">默认 Provider</div>
+                        <div className="text-xs text-gray-500">个人配置未覆盖时继承全局</div>
+                      </div>
+                      <div className="flex min-h-11 items-center justify-between rounded-md border border-gray-200 bg-white px-3 text-sm font-semibold text-gray-900">
+                        <span>{providerLabel || 'OpenAI / ChatGPT'}</span>
+                        <span className="text-xs text-gray-500">继承全局</span>
+                      </div>
+                      <Button variant="secondary" size="sm" onClick={() => setActiveScope('global')}>
+                        编辑全局
+                      </Button>
+                    </div>
+
+                    <div className="grid gap-3 rounded-md border border-gray-200 bg-gray-50 p-4 lg:grid-cols-[180px_minmax(0,1fr)_140px] lg:items-center">
+                      <div>
+                        <div className="text-sm font-semibold text-gray-900">个人 API Key</div>
+                        <div className="text-xs text-gray-500">当前用户的自动化执行凭据</div>
+                      </div>
+                      <div className="flex min-h-11 items-center justify-between rounded-md border border-gray-200 bg-white px-3 text-sm font-semibold text-gray-900">
+                        <span>继承全局 API</span>
+                        <span className="text-xs text-gray-500">可配置个人密钥</span>
+                      </div>
+                      <Button variant="secondary" size="sm" onClick={() => document.getElementById('personal-models')?.scrollIntoView({ behavior: 'smooth' })}>
+                        重新填写
+                      </Button>
+                    </div>
+                  </div>
+                </SectionCard>
+
+                <SectionCard
+                  id="personal-models"
+                  title="AI 模型"
+                  description="与全局默认配置保持同样的模型字段；保存后写入当前用户个人配置。"
+                  action={<span className="rounded-full border border-amber-200 bg-amber-50 px-3 py-1 text-xs font-semibold text-amber-700">个人配置优先</span>}
+                >
+                  <div className="mb-4 flex flex-wrap gap-2">
+                    <span className="rounded-md border border-amber-200 bg-amber-50 px-2 py-1 text-xs font-semibold text-amber-700">来源：用户个人配置</span>
+                    <span className="rounded-md border border-blue-200 bg-blue-50 px-2 py-1 text-xs font-semibold text-blue-700">未填写则继承全局默认</span>
+                    <span className="rounded-md border border-gray-200 bg-gray-50 px-2 py-1 text-xs font-semibold text-gray-600">Codex 可选，执行前需连接账号</span>
+                  </div>
+                  <div className="space-y-4">
+                    {modelConfigItems.map(renderModelConfigGroup)}
+                  </div>
+                  <div className="mt-4 flex flex-wrap gap-2">
+                    <Button variant="secondary" size="sm" onClick={runTextModelTest}>
+                      测试文本模型
+                    </Button>
+                    <Button variant="secondary" size="sm" onClick={runImageModelTest}>
+                      测试图片模型
+                    </Button>
+                    <Button variant="secondary" size="sm" onClick={runCaptionModelTest}>
+                      测试图片识别
+                    </Button>
+                  </div>
+                </SectionCard>
+
+                <SectionCard
+                  id="personal-generation"
+                  title="生成策略"
+                  description="个人配置页与全局配置页保持同构；暂未纳入个人 schema 的字段会继续继承全局。"
+                  action={<span className="rounded-full border border-blue-200 bg-blue-50 px-3 py-1 text-xs font-semibold text-blue-700">个人覆盖待接入</span>}
+                >
+                  <div className="grid gap-5 xl:grid-cols-2">
+                    {generationSections.map((section) => (
+                      <div key={section.title} className="rounded-md border border-gray-100 bg-gray-50 p-4">
+                        <h3 className="mb-3 flex items-center gap-2 text-sm font-semibold text-gray-800">
+                          {section.icon}
+                          {section.title}
+                        </h3>
+                        <div className="space-y-4">
+                          {section.fields.map((field) => renderField(field))}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </SectionCard>
+
+                <SectionCard
+                  id="personal-parsing"
+                  title="文件解析"
+                  description="展示与全局配置一致的解析字段；未纳入个人 schema 的解析项默认继承全局。"
+                  action={<span className="rounded-full border border-gray-200 bg-gray-50 px-3 py-1 text-xs font-semibold text-gray-600">默认继承全局</span>}
+                >
+                  <div className="grid gap-5 xl:grid-cols-2">
+                    {parsingSections.map((section) => (
+                      <div key={section.title} className="rounded-md border border-gray-100 bg-gray-50 p-4">
+                        <h3 className="mb-3 flex items-center gap-2 text-sm font-semibold text-gray-800">
+                          {section.icon}
+                          {section.title}
+                        </h3>
+                        <div className="space-y-4">
+                          {section.fields.map((field) => renderField(field))}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </SectionCard>
+
+                <SectionCard
+                  id="personal-service"
+                  title="服务连接"
+                  description="当前用户的账号、订阅、密钥与连接状态。"
+                  action={<Button variant="secondary" size="sm" onClick={forceUseGlobalDefault} icon={<RotateCcw size={16} />}>强制使用全局默认</Button>}
+                >
+                  <div className="space-y-3">
+                    <div className="grid gap-3 rounded-md border border-gray-200 bg-gray-50 p-4 lg:grid-cols-[180px_minmax(0,1fr)_140px] lg:items-center">
+                      <div>
+                        <div className="text-sm font-semibold text-gray-900">个人配置总策略</div>
+                        <div className="text-xs text-gray-500">控制当前用户是否启用个人覆盖</div>
+                      </div>
+                      <select
+                        value={personalConfig.mode}
+                        onChange={(event) => updatePersonalConfig('mode', event.target.value as PersonalPreferenceMode)}
+                        className="h-11 rounded-md border border-amber-300 bg-white px-3 text-sm font-semibold text-gray-900 shadow-sm focus:border-amber-500 focus:outline-none focus:ring-2 focus:ring-amber-200"
+                      >
+                        <option value="auto">自动使用个人配置，失败时回退全局</option>
+                        <option value="global">强制使用全局默认</option>
+                      </select>
+                      <span className="rounded-full border border-amber-200 bg-amber-50 px-3 py-1 text-center text-xs font-semibold text-amber-700">
+                        保存后生效
+                      </span>
+                    </div>
+
+                    <div className="grid gap-3 rounded-md border border-gray-200 bg-gray-50 p-4 lg:grid-cols-[180px_minmax(0,1fr)_140px] lg:items-center">
+                      <div>
+                        <div className="text-sm font-semibold text-gray-900">账号连接</div>
+                        <div className="text-xs text-gray-500">大纲、描述、自然语言修改</div>
+                      </div>
+                      <div className="flex min-h-11 items-center justify-between rounded-md border border-gray-200 bg-white px-3 text-sm font-semibold text-gray-900">
+                        <span>{accountConnected ? 'ChatGPT / OpenAI 已连接' : '未连接账号'}</span>
+                        <span className="text-xs text-gray-500">{accountId || '可连接'}</span>
+                      </div>
+                      <Button
+                        variant="secondary"
+                        size="sm"
+                        onClick={accountConnected ? handleOAuthDisconnect : handleOAuthLogin}
+                        loading={oauthConnecting}
+                      >
+                        {accountConnected ? '断开' : '连接'}
+                      </Button>
+                    </div>
+
+                    <div className="grid gap-3 rounded-md border border-gray-200 bg-gray-50 p-4 lg:grid-cols-[180px_minmax(0,1fr)_140px] lg:items-center">
+                      <div>
+                        <div className="text-sm font-semibold text-gray-900">个人 API Key</div>
+                        <div className="text-xs text-gray-500">当前用户自己的自动化执行凭据</div>
+                      </div>
+                      <div className="flex min-h-11 items-center justify-between rounded-md border border-gray-200 bg-white px-3 text-sm font-semibold text-gray-900">
+                        <span>{displaySettings?.api_key_length ? `已配置（长度 ${displaySettings.api_key_length}）` : '沿用全局 API'}</span>
+                        <span className="text-xs text-gray-500">保存后生效</span>
+                      </div>
+                      <Button variant="secondary" size="sm" onClick={() => document.getElementById('personal-models')?.scrollIntoView({ behavior: 'smooth' })}>
+                        重新填写
+                      </Button>
+                    </div>
+
+                    <div className="flex flex-col gap-2 rounded-md border border-blue-200 bg-blue-50 px-3 py-2 text-xs text-blue-700 sm:flex-row sm:items-center sm:justify-between">
+                      <span><strong>能力接入方式说明</strong>：订阅适合大纲、描述、自然语言修改；PPTX 工作流使用 API / 企业代理。</span>
+                      <button type="button" className="self-start rounded-md border border-blue-200 bg-white px-2 py-1 font-semibold sm:self-auto">
+                        查看详情
+                      </button>
+                    </div>
+                  </div>
+                </SectionCard>
+
+                <SectionCard
+                  id="personal-advanced"
+                  title="兼容高级"
+                  description="与全局配置保持同构，低频兼容项默认继承全局。"
+                  action={<Button variant="secondary" size="sm" onClick={() => setAdvancedOpen(!advancedOpen)}>
+                    {advancedOpen ? '收起' : '展开'}
+                  </Button>}
+                >
+                  <div className="grid gap-5 xl:grid-cols-2">
+                    {advancedSections.map((section) => (
+                      <div key={section.title} className="rounded-md border border-gray-100 bg-gray-50 p-4">
+                        <h3 className="mb-3 flex items-center gap-2 text-sm font-semibold text-gray-800">
+                          {section.icon}
+                          {section.title}
+                        </h3>
+                        <div className="space-y-4">
+                          {section.fields.map((field) => renderField(field))}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </SectionCard>
+
+                <SectionCard
+                  id="personal-fallback"
+                  title="覆盖链路"
+                  description="个人配置与全局配置同构展示，最终生效值按统一 resolver 计算。"
+                  action={<Button variant="secondary" size="sm" onClick={() => setActiveScope('global')}>切到全局默认配置</Button>}
+                >
+                  <div className="grid gap-3 md:grid-cols-3">
+                    <div className="rounded-md border border-gray-200 bg-gray-50 p-4">
+                      <div className="text-xs text-gray-500">默认 Provider</div>
+                      <div className="mt-2 text-base font-semibold text-gray-900">{providerLabel}</div>
+                    </div>
+                    <div className="rounded-md border border-gray-200 bg-gray-50 p-4">
+                      <div className="text-xs text-gray-500">图片模型</div>
+                      <div className="mt-2 text-base font-semibold text-gray-900">{formData.image_model || 'gpt-image-2'}</div>
+                    </div>
+                    <div className="rounded-md border border-gray-200 bg-gray-50 p-4">
+                      <div className="text-xs text-gray-500">敏感密钥</div>
+                      <div className="mt-2 text-base font-semibold text-gray-900">{configuredSecrets} 项已配置</div>
+                    </div>
+                  </div>
+                  {effectiveCapabilityList.length > 0 && (
+                    <div className="mt-4 overflow-hidden rounded-md border border-gray-200">
+                      <div className="grid grid-cols-[1.2fr_0.9fr_0.8fr_1.1fr] gap-3 border-b border-gray-200 bg-gray-50 px-3 py-2 text-xs font-semibold text-gray-500">
+                        <span>能力</span>
+                        <span>执行方式</span>
+                        <span>状态</span>
+                        <span>原因</span>
+                      </div>
+                      {effectiveCapabilityList.map((capability) => (
+                        <div key={capability.key} className="grid grid-cols-[1.2fr_0.9fr_0.8fr_1.1fr] gap-3 border-b border-gray-100 px-3 py-2 text-sm last:border-b-0">
+                          <span className="font-semibold text-gray-800">{capability.label}</span>
+                          <span className="text-gray-600">
+                            {capability.execution_mode === 'account_subscription' ? '账号/订阅' : capability.api_required ? 'API 必需' : 'API / 账号'}
+                          </span>
+                          <span className={capability.ready ? 'font-semibold text-emerald-700' : 'font-semibold text-red-600'}>
+                            {capability.ready ? '可用' : '需配置'}
+                          </span>
+                          <span className="text-xs leading-5 text-gray-500">{capability.reason || (capability.use_global_default ? '继承全局默认' : '个人配置生效')}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </SectionCard>
+
+                {personalDirty && (
+                  <div className="sticky bottom-0 z-10 flex items-center justify-between rounded-md border border-gray-200 bg-gray-900 p-3 text-white shadow-lg">
+                    <div>
+                      <div className="text-sm font-semibold">个人配置有未保存修改</div>
+                      <div className="text-xs text-gray-300">保存后会写入当前用户配置，并刷新生效配置链路。</div>
+                    </div>
+                    <div className="flex gap-2">
+                      <Button variant="ghost" size="sm" onClick={() => {
+                        if (settings) {
+                          setFormData(formDataFromSettings(personalSettings ? { ...settings, ...personalSettings } : settings));
+                        }
+                        setPersonalConfig(prev => ({ ...prev, mode: personalSettings?.force_global_default ? 'global' : 'auto' }));
+                        setPersonalDirty(false);
+                      }}>
+                        放弃
+                      </Button>
+                      <Button variant="secondary" size="sm" onClick={handleSave} loading={isSaving}>
+                        保存个人配置
+                      </Button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          </>
+        ) : (
+          <>
         <div className="grid gap-3 lg:grid-cols-[1.3fr_1fr_1fr]">
           <div className="rounded-md border border-amber-200 bg-amber-50 p-4">
             <div className="text-xs font-semibold text-amber-700">推荐主线</div>
@@ -1536,13 +2167,17 @@ export const Settings: React.FC = () => {
                   <option
                     key={option.value}
                     value={option.value}
-                    disabled={option.value === 'codex' && !settings?.openai_oauth_connected}
                   >
-                    {option.label}{option.value === 'codex' && !settings?.openai_oauth_connected ? ` (${t('settings.openaiOAuth.disconnected')})` : ''}
+                    {option.label}{option.value === 'codex' && !accountConnected ? '（需连接账号）' : ''}
                   </option>
                 ))}
               </select>
               <p className="mt-1 text-sm text-gray-500 dark:text-foreground-tertiary">{t('settings.fields.aiProviderFormatDesc')}</p>
+              {formData.ai_provider_format === 'codex' && !accountConnected && (
+                <p className="mt-1 text-sm font-medium text-amber-700">
+                  已选择 Codex。执行前需要先在“服务连接”中连接 OpenAI/ChatGPT 账号。
+                </p>
+              )}
             </div>
 
             {/* Gemini/OpenAI: API Base URL + API Key */}
@@ -1561,8 +2196,8 @@ export const Settings: React.FC = () => {
                     label={t('settings.fields.apiKey')}
                     type="password"
                     placeholder={
-                      settings && (settings.api_key_length as number) > 0
-                        ? t('settings.fields.apiKeySet', { length: settings.api_key_length })
+                      displaySettings && (displaySettings.api_key_length as number) > 0
+                        ? t('settings.fields.apiKeySet', { length: displaySettings.api_key_length })
                         : t('settings.fields.apiKeyPlaceholder')
                     }
                     value={formData.api_key}
@@ -1575,7 +2210,7 @@ export const Settings: React.FC = () => {
 
             {/* LazyLLM 厂商: 厂商 API Key */}
             {isLazyllmVendor(formData.ai_provider_format) && (
-              <GlobalVendorKeyInput vendor={formData.ai_provider_format} formData={formData} setFormData={setFormData} settings={settings} t={t} />
+              <GlobalVendorKeyInput vendor={formData.ai_provider_format} formData={formData} setFormData={setFormData} settings={displaySettings} t={t} />
             )}
           </div>
 
@@ -1690,19 +2325,19 @@ export const Settings: React.FC = () => {
               <div className="rounded-md border border-gray-200 p-4">
                 <div className="flex items-center justify-between gap-3">
                   <div className="flex items-center gap-3">
-                    <div className={`w-2.5 h-2.5 rounded-full ${settings?.openai_oauth_connected ? 'bg-green-500' : 'bg-gray-300 dark:bg-gray-600'}`} />
+                    <div className={`w-2.5 h-2.5 rounded-full ${accountConnected ? 'bg-green-500' : 'bg-gray-300 dark:bg-gray-600'}`} />
                     <div>
                       <span className="text-sm font-medium text-gray-700 dark:text-foreground-secondary">
-                        {settings?.openai_oauth_connected ? t('settings.openaiOAuth.connected') : t('settings.openaiOAuth.disconnected')}
+                        {accountConnected ? t('settings.openaiOAuth.connected') : t('settings.openaiOAuth.disconnected')}
                       </span>
-                      {settings?.openai_oauth_connected && settings?.openai_oauth_account_id && (
+                      {accountConnected && accountId && (
                         <span className="ml-2 text-sm text-gray-500 dark:text-foreground-tertiary">
-                          ({settings.openai_oauth_account_id})
+                          ({accountId})
                         </span>
                       )}
                     </div>
                   </div>
-                  {settings?.openai_oauth_connected ? (
+                  {accountConnected ? (
                     <button
                       onClick={handleOAuthDisconnect}
                       className="px-4 py-2 text-sm font-medium text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg hover:bg-red-100 dark:hover:bg-red-900/30 transition-colors"
@@ -1720,7 +2355,7 @@ export const Settings: React.FC = () => {
                   )}
                 </div>
                 <p className="mt-3 text-xs text-gray-500 dark:text-foreground-tertiary">{t('settings.openaiOAuth.hint')}</p>
-                {!settings?.openai_oauth_connected && (
+                {!accountConnected && (
                   <div className="mt-3">
                     <button
                       onClick={() => setManualCallbackOpen(v => !v)}
@@ -1928,6 +2563,9 @@ export const Settings: React.FC = () => {
             {isSaving ? t('settings.actions.saving') : t('settings.actions.save')}
           </Button>
         </div>
+
+          </>
+        )}
 
         <SettingsAbout t={t} />
       </div>

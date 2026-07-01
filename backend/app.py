@@ -16,7 +16,7 @@ from flask_migrate import Migrate
 # Load environment variables from project root .env file
 _project_root = Path(__file__).parent.parent
 _env_file = _project_root / '.env'
-load_dotenv(dotenv_path=_env_file, override=True)
+load_dotenv(dotenv_path=_env_file, override=False)
 
 from flask import Flask
 from flask_cors import CORS
@@ -192,7 +192,7 @@ def create_app():
     # Health check endpoint
     @app.route('/health')
     def health_check():
-        return {'status': 'ok', 'message': 'Banana Slides API is running'}
+        return {'status': 'ok', 'message': 'PV SmartDeck API is running'}
 
     # Access code verification
     @app.route('/api/access-code/check', methods=['GET'])
@@ -442,7 +442,7 @@ if __name__ == '__main__':
     logging.info(
         "\n"
         "╔══════════════════════════════════════╗\n"
-        "║   🍌 Banana Slides API Server 🍌   ║\n"
+        "║        PV SmartDeck API Server      ║\n"
         "╚══════════════════════════════════════╝\n"
         f"Server starting on: http://localhost:{port}\n"
         f"Output Language: {Config.OUTPUT_LANGUAGE}\n"

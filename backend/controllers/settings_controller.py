@@ -9,11 +9,11 @@ import tempfile
 from pathlib import Path
 from datetime import datetime, timezone
 from contextlib import contextmanager
-from flask import Blueprint, request, current_app
+from flask import Blueprint, request, current_app, g
 from PIL import Image
 from models import db, Settings, Task
 from utils import success_response, error_response, bad_request
-from utils.auth import require_admin
+from utils.auth import require_admin, require_auth
 from config import Config, PROJECT_ROOT
 from services.ai_service import AIService
 from services.file_parser_service import FileParserService
@@ -569,6 +569,24 @@ def get_active_config():
     })
 
 
+@settings_bp.route("/effective", methods=["GET"], strict_slashes=False)
+@require_auth
+def get_effective_config():
+    """
+    GET /api/settings/effective - Return global + personal resolved AI settings.
+    """
+    try:
+        from services.settings_resolver import resolve_effective_settings
+        return success_response(resolve_effective_settings(g.current_user))
+    except Exception as e:
+        logger.error(f"Error resolving effective settings: {str(e)}", exc_info=True)
+        return error_response(
+            "GET_EFFECTIVE_SETTINGS_ERROR",
+            f"Failed to resolve effective settings: {str(e)}",
+            500,
+        )
+
+
 @settings_bp.route("/verify", methods=["POST"], strict_slashes=False)
 @require_admin
 def verify_api_key():
@@ -612,7 +630,7 @@ def verify_api_key():
                 settings.text_model
                 or current_app.config.get("TEXT_MODEL")
                 or Config.TEXT_MODEL
-                or "gemini-3-flash-preview"
+                or "gpt-5.5"
             )
 
             # 尝试创建provider并调用一个简单的测试请求
