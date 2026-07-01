@@ -1356,3 +1356,14 @@ ui-guangfu-dashboard-redesign
 - 验证：定向测试 `46 passed`；错误分类修正后路由/runtime 测试 `19 passed`；完整后端 unit 回归 `418 passed / 5 skipped`；`git diff --cached --check` 通过。
 - 遗留：普通图片识别、导出队列 effective runtime、项目覆盖、个人密钥加密、用户级 OAuth、个人 LazyLLM 隔离、可编辑 PPTX 原图视觉对比自动校正仍未完成。
 - 下一步：接入导出任务的 effective 来源和 resolver 失败原因展示，再实现项目覆盖层并验证 `项目 > 个人 > 全局 > 系统默认` 优先级。
+
+### 2026-07-01 22:05 - 导出任务配置来源展示接入
+
+- 范围：`frontend/src/store/useExportTasksStore.ts`、`frontend/src/pages/ExportTasks.tsx`、`frontend/src/components/shared/ExportTasksPanel.tsx`、`docs/design/guangfu-zhicheng-design.md`。
+- 动作：将后端任务进度中的 `progress.config_source` 建模为导出任务的一等字段；新增来源摘要格式化能力；在一级导出任务中心和预览页导出任务浮层展示本次任务实际使用的能力、Provider、模型和来源层；搜索范围同步覆盖配置来源摘要。
+- 结果：可编辑 PPTX 的 `visual/element`、图片生成的 `prompt/image`、描述生成的单 runtime 来源都会在任务行内可读，用户排查失败时可以直接看到是否走了个人配置、全局配置或后续项目覆盖，不再只看到泛化失败文案。
+- 计划状态：导出任务失败原因已有后端 `error_message` 和前端可读展示，本步骤补齐来源展示；项目覆盖 resolver 层仍未接入。
+- 验证：`npm run guard:brand` 通过；`npx eslint src/store/useExportTasksStore.ts src/pages/ExportTasks.tsx src/components/shared/ExportTasksPanel.tsx --ext ts,tsx --max-warnings 20` 通过。
+- 构建说明：`npm run build:check` 中品牌守卫通过，但全量 `tsc` 被既有类型债务阻塞，包含 `AccessCodeGuard.tsx`、`MaterialCenterModal.tsx`、`Landing.tsx`、`Settings.tsx`、`useProjectStore.ts` 和若干测试文件的历史错误；本次触达文件 lint 已通过。
+- 遗留：普通图片识别独立入口、项目覆盖 resolver、个人密钥加密、用户级 OAuth、个人 LazyLLM 隔离、可编辑 PPTX 原图视觉比对自动校正仍未完成；全量前端 TS 债务需要单独清理。
+- 下一步：开始项目覆盖 resolver 层，先盘点 Project 模型已有可覆盖字段，再实现 `项目 > 个人 > 全局 > 系统默认` 的后端合并与来源标记。

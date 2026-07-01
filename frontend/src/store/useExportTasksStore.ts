@@ -15,6 +15,26 @@ const t = getT(exportI18n);
 export type ExportTaskStatus = 'PENDING' | 'PROCESSING' | 'RUNNING' | 'COMPLETED' | 'FAILED';
 export type ExportTaskType = 'pptx' | 'pdf' | 'editable-pptx' | 'images' | 'video';
 
+export interface RuntimeSourceSummary {
+  capability?: string;
+  provider?: string;
+  model?: string;
+  api_base_url?: string | null;
+  credential_fingerprint?: string;
+  account_identity?: string | null;
+  image_api_protocol?: string;
+  resolution?: string;
+  source?: {
+    provider?: string;
+    model?: string;
+    credential?: string;
+    [key: string]: unknown;
+  };
+  [key: string]: unknown;
+}
+
+export type ExportConfigSource = RuntimeSourceSummary | Record<string, RuntimeSourceSummary>;
+
 export interface ExportTask {
   id: string;
   taskId: string;
@@ -40,13 +60,66 @@ export interface ExportTask {
     };
     download_url?: string;
     filename?: string;
+    config_source?: ExportConfigSource;
   };
+  configSource?: ExportConfigSource;
   downloadUrl?: string;
   filename?: string;
   errorMessage?: string;
   createdAt: string;
   completedAt?: string;
 }
+
+const capabilityLabels: Record<string, string> = {
+  outline: '大纲',
+  description: '描述',
+  natural_edit: '自然语言修改',
+  image_caption: '图片识别',
+  image_generation: '图片生成',
+  pptx_generation: 'PPTX 生成',
+  editable_pptx_visual: '可编辑 PPTX 结构分析',
+  editable_pptx_element: '独立元素生成',
+  export_queue: '导出队列',
+};
+
+const sourceLabels: Record<string, string> = {
+  system_default: '系统默认',
+  global: '全局配置',
+  personal: '个人配置',
+  project_override: '项目覆盖',
+  request_override: '本次请求',
+};
+
+const isRuntimeSourceSummary = (value: unknown): value is RuntimeSourceSummary => (
+  Boolean(value)
+  && typeof value === 'object'
+  && (
+    'capability' in (value as Record<string, unknown>)
+    || 'provider' in (value as Record<string, unknown>)
+    || 'model' in (value as Record<string, unknown>)
+  )
+);
+
+const normalizeConfigEntries = (configSource?: ExportConfigSource): Array<[string, RuntimeSourceSummary]> => {
+  if (!configSource || typeof configSource !== 'object') return [];
+  if (isRuntimeSourceSummary(configSource)) {
+    const key = configSource.capability || 'runtime';
+    return [[key, configSource]];
+  }
+  return Object.entries(configSource)
+    .filter((entry): entry is [string, RuntimeSourceSummary] => isRuntimeSourceSummary(entry[1]));
+};
+
+export const formatConfigSourceSummary = (configSource?: ExportConfigSource): string[] => (
+  normalizeConfigEntries(configSource).map(([key, source]) => {
+    const capability = capabilityLabels[source.capability || key] || source.capability || key;
+    const provider = source.provider || '未指定 Provider';
+    const model = source.model || '未指定模型';
+    const sourceLayer = sourceLabels[source.source?.model || source.source?.provider || source.source?.credential || ''] || '';
+    const suffix = sourceLayer ? ` · ${sourceLayer}` : '';
+    return `${capability}: ${provider} / ${model}${suffix}`;
+  })
+);
 
 const pollTimeouts = new Map<string, ReturnType<typeof setTimeout>>();
 
@@ -162,6 +235,9 @@ export const useExportTasksStore = create<ExportTasksState>()(
               if (progressData.filename) {
                 updates.filename = progressData.filename;
               }
+              if (progressData.config_source) {
+                updates.configSource = progressData.config_source;
+              }
             }
 
             if (task.status === 'COMPLETED') {
@@ -170,8 +246,9 @@ export const useExportTasksStore = create<ExportTasksState>()(
               get().updateTask(id, updates);
             } else if (task.status === 'FAILED') {
               pollTimeouts.delete(id);
+              const responseError = (task as { error?: string | { message?: string } }).error;
               const taskErrorMessage = task.error_message
-                || (typeof task.error === 'string' ? task.error : task.error?.message)
+                || (typeof responseError === 'string' ? responseError : responseError?.message)
                 || t('exportStore.exportFailed');
               updates.errorMessage = normalizeErrorMessage(taskErrorMessage);
               updates.completedAt = new Date().toISOString();

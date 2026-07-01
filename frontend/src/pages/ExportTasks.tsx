@@ -18,6 +18,7 @@ import {
 } from 'lucide-react';
 import { Button, Input } from '@/components/shared';
 import {
+  formatConfigSourceSummary,
   useExportTasksStore,
   type ExportTask,
   type ExportTaskStatus,
@@ -140,6 +141,7 @@ const TaskRow: React.FC<{
   const navigate = useNavigate();
   const progress = getProgressPercent(task);
   const latestMessage = getLatestMessage(task);
+  const configSourceSummary = formatConfigSourceSummary(task.configSource || task.progress?.config_source);
   const canDownload = task.status === 'COMPLETED' && Boolean(task.downloadUrl || task.progress?.download_url);
 
   return (
@@ -203,6 +205,19 @@ const TaskRow: React.FC<{
                 <div key={warning} className="break-words">• {warning}</div>
               ))}
               {task.progress.warnings.length > 3 && <div>还有 {task.progress.warnings.length - 3} 条警告</div>}
+            </div>
+          )}
+
+          {configSourceSummary.length > 0 && (
+            <div className="mt-3 rounded-md border border-blue-100 bg-blue-50 px-3 py-2 text-xs text-blue-700">
+              <div className="mb-1 font-semibold text-blue-800">本次使用配置</div>
+              <div className="flex flex-wrap gap-1.5">
+                {configSourceSummary.map((summary) => (
+                  <span key={summary} className="rounded border border-blue-200 bg-white px-2 py-1">
+                    {summary}
+                  </span>
+                ))}
+              </div>
             </div>
           )}
         </div>
@@ -292,6 +307,7 @@ export const ExportTasks: React.FC = () => {
         task.projectId,
         task.errorMessage,
         getLatestMessage(task),
+        ...formatConfigSourceSummary(task.configSource || task.progress?.config_source),
       ].filter(Boolean).join(' ').toLowerCase();
       return matchesStatus && matchesFormat && (!query || haystack.includes(query));
     });
