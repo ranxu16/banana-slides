@@ -864,3 +864,21 @@ ui-guangfu-dashboard-redesign
 - 验证：`npm run guard:brand` 通过；`npm run test:run -- src/tests/branding-workbench-regression.test.ts` 通过，2 tests passed；`npm run build` 通过；`git diff --check -- frontend/src/pages/ExportTasks.tsx frontend/src/store/useExportTasksStore.ts frontend/src/App.tsx docs/design/guangfu-zhicheng-design.md` 通过。
 - 遗留：失败任务的“重新检查”当前只重新拉取原 task 状态，不会重新发起一次导出；真正“重试导出”需要后端提供按历史任务参数重新导出的接口，或前端保存原导出参数并回到项目预览页重新导出；页面暂未展示服务端历史导出文件列表，当前只展示本地持久化的任务记录。
 - 下一步：阶段性提交本次导出任务中心前端改造；随后继续模板中心/素材中心或进入全局配置中心整页重构。
+
+### 2026-07-01 10:05 - 全局配置中心首轮重构启动
+
+- 范围：`docs/design/mockups/global-settings.md`、`frontend/src/pages/Settings.tsx`。
+- 动作：读取全局配置中心设计稿和现有设置页实现；确认本步骤只做前端信息架构与视觉框架重构，不改 `getSettings/updateSettings/test*` 后端接口，不改实际保存 payload。
+- 结果：现有设置页保留了旧“系统设置/返回首页”心智，缺少左侧配置导航、配置来源提示、OpenAI 主线推荐和项目覆盖说明；但现有保存、重置、OAuth、服务测试和敏感字段不回显逻辑可继续复用。
+- 验证：通过 `sed` 和 `rg` 定位 Settings 的表单分组、保存逻辑、服务测试逻辑与当前 return 主体。
+- 遗留：本步骤暂不实现浏览器离开拦截和字段级校验体系；先完成全局配置中心首屏框架、AI 模型分组说明、密钥状态与来源可见化。
+- 下一步：修改 `Settings.tsx` 页面外壳、分组导航与关键辅助信息，并在完成后跑品牌守卫、设置相关测试和构建。
+
+### 2026-07-01 10:25 - 全局配置中心首轮重构完成
+
+- 范围：`frontend/src/pages/Settings.tsx`、`docs/design/guangfu-zhicheng-design.md`。
+- 动作：移除 `SettingsPage` 旧独立渐变背景、卡片容器和返回首页按钮，让 AppShell 统一承接页面标题与布局；在设置页内新增四个状态摘要卡、左侧配置目录、全局配置来源标签、OpenAI/ChatGPT 推荐主线提示、AI 模型分组说明、项目覆盖说明和底部 sticky 保存条；保留原 `getSettings/updateSettings/resetSettings/test*`、OpenAI OAuth、服务测试、敏感字段不回显和保存 payload 逻辑。
+- 结果：全局配置中心已经从旧“系统设置”单页卡片转为企业后台配置页；用户能看到当前默认 Provider、敏感密钥配置状态、配置来源和项目覆盖策略；AI 模型区明确文本生成、图片生成、图片识别，以及可编辑 PPTX 视觉结构分析/gpt-image-2 图层生成应优先走 OpenAI 主线。
+- 验证：`npm run guard:brand` 通过；`npm run test:run -- src/tests/branding-workbench-regression.test.ts` 通过，2 tests passed；`npm run build` 通过；`git diff --check -- frontend/src/pages/Settings.tsx docs/design/guangfu-zhicheng-design.md` 通过；`rg` 检查页面渲染不再包含旧渐变容器、`Card` 包装、`useNavigate/useLocation` 或返回首页按钮。
+- 遗留：脏状态检测、离开页面拦截、字段级校验和项目覆盖真实来源链路仍未实现；“服务连接”目前仍在高级配置折叠区内，后续可拆为独立一级配置面板；翻译字典里仍保留少量旧 `系统设置/返回首页` 文案但不再渲染。
+- 下一步：阶段性提交本次全局配置中心前端改造；随后继续模板中心/素材中心一级页面，或回到后端配置/可编辑 PPTX 流水线 checkpoint。

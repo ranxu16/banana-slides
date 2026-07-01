@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useLocation, useNavigate } from 'react-router-dom';
-import { Home, Key, Image, Zap, Save, RotateCcw, Globe, FileText, Brain, ArrowUp, HelpCircle, Link2, ChevronDown, Volume2, Info, RefreshCw, CheckCircle } from 'lucide-react';
+import { Key, Image, Zap, Save, RotateCcw, Globe, FileText, Brain, ArrowUp, HelpCircle, Link2, ChevronDown, Volume2, Info, RefreshCw, CheckCircle } from 'lucide-react';
 import { useT } from '@/hooks/useT';
 import { appVersion } from '@/utils/appVersion';
 
@@ -305,7 +304,7 @@ const settingsI18n = {
     }
   }
 };
-import { Button, Input, Card, Loading, Modal, useToast, ToastContainer, useConfirm } from '@/components/shared';
+import { Button, Input, Loading, Modal, useToast, ToastContainer, useConfirm } from '@/components/shared';
 import * as api from '@/api/endpoints';
 import type { OutputLanguage, UpdateCheckInfo } from '@/api/endpoints';
 import { OUTPUT_LANGUAGE_OPTIONS } from '@/api/endpoints';
@@ -1421,6 +1420,27 @@ export const Settings: React.FC = () => {
     );
   };
 
+  const providerLabel = ALL_PROVIDER_SOURCES.find((source) => source.value === formData.ai_provider_format)?.label || formData.ai_provider_format;
+  const configuredSecrets = [
+    settings?.api_key_length,
+    settings?.text_api_key_length,
+    settings?.image_api_key_length,
+    settings?.image_caption_api_key_length,
+    settings?.mineru_token_length,
+    settings?.baidu_api_key_length,
+    settings?.elevenlabs_api_key_length,
+  ].filter((length) => Number(length) > 0).length;
+  const configNavItems = [
+    { href: '#settings-api', label: '基础信息' },
+    { href: '#settings-models', label: 'AI 模型' },
+    { href: '#settings-export', label: 'PPT 导出' },
+    { href: '#settings-parsing', label: '文件解析' },
+    { href: '#settings-advanced', label: '服务连接' },
+    { href: '#settings-advanced', label: '兼容与高级' },
+    { href: '#settings-tests', label: '服务测试' },
+    { href: '#settings-overrides', label: '项目覆盖' },
+  ];
+
   if (isLoading) {
     return (
       <div className="flex items-center justify-center py-12">
@@ -1433,14 +1453,61 @@ export const Settings: React.FC = () => {
     <>
       <ToastContainer toasts={settingsToasts} onRemove={settingsRemove} />
       {ConfirmDialog}
-      <div className="space-y-8">
+      <div className="space-y-6">
+        <div className="grid gap-3 md:grid-cols-4">
+          <div className="rounded-md border border-gray-200 bg-white p-4">
+            <div className="text-xs font-medium text-gray-500">推荐主线</div>
+            <div className="mt-2 text-base font-semibold text-gray-900">OpenAI / ChatGPT</div>
+            <div className="mt-1 text-xs text-gray-500">文本、视觉理解、图片生成优先走 OpenAI 配置</div>
+          </div>
+          <div className="rounded-md border border-gray-200 bg-white p-4">
+            <div className="text-xs font-medium text-gray-500">当前默认 Provider</div>
+            <div className="mt-2 text-base font-semibold text-gray-900">{providerLabel}</div>
+            <div className="mt-1 text-xs text-gray-500">来源：全局配置，可被模型级配置覆盖</div>
+          </div>
+          <div className="rounded-md border border-gray-200 bg-white p-4">
+            <div className="text-xs font-medium text-gray-500">敏感密钥</div>
+            <div className="mt-2 text-base font-semibold text-gray-900">{configuredSecrets} 项已配置</div>
+            <div className="mt-1 text-xs text-gray-500">页面只显示状态和长度，不明文回显</div>
+          </div>
+          <div className="rounded-md border border-gray-200 bg-white p-4">
+            <div className="text-xs font-medium text-gray-500">项目覆盖</div>
+            <div className="mt-2 text-base font-semibold text-gray-900">显式覆盖优先</div>
+            <div className="mt-1 text-xs text-gray-500">项目级覆盖项后续统一展示来源</div>
+          </div>
+        </div>
+
+        <div className="grid gap-6 xl:grid-cols-[220px_minmax(0,1fr)]">
+          <aside className="hidden xl:block">
+            <div className="sticky top-24 rounded-md border border-gray-200 bg-white p-3">
+              <div className="px-2 pb-2 text-xs font-semibold text-gray-500">配置目录</div>
+              <nav className="space-y-1">
+                {configNavItems.map((item) => (
+                  <a
+                    key={item.href}
+                    href={item.href}
+                    className="block rounded-md px-2 py-2 text-sm font-medium text-gray-600 transition-colors hover:bg-amber-50 hover:text-amber-700"
+                  >
+                    {item.label}
+                  </a>
+                ))}
+              </nav>
+            </div>
+          </aside>
+
+          <div className="space-y-5">
         {/* 默认 API 配置区块 */}
-        <div data-testid="global-api-config-section">
+        <div id="settings-api" data-testid="global-api-config-section" className="rounded-md border border-gray-200 bg-white p-5">
           <h2 className="text-xl font-semibold text-gray-900 dark:text-foreground-primary mb-1 flex items-center">
             <Key size={20} />
             <span className="ml-2">{t('settings.sections.apiConfig')}</span>
           </h2>
           <p className="text-sm text-gray-500 dark:text-foreground-tertiary mb-4">{t('settings.sections.apiConfigDesc')}</p>
+          <div className="mb-4 flex flex-wrap gap-2">
+            <span className="rounded-md border border-emerald-200 bg-emerald-50 px-2 py-1 text-xs font-semibold text-emerald-700">来源：全局配置</span>
+            <span className="rounded-md border border-blue-200 bg-blue-50 px-2 py-1 text-xs font-semibold text-blue-700">OpenAI / ChatGPT 推荐主线</span>
+            <span className="rounded-md border border-gray-200 bg-gray-50 px-2 py-1 text-xs font-semibold text-gray-600">兼容 Provider 可作为高级选项</span>
+          </div>
           <div className="space-y-3">
             {/* 提供商下拉 */}
             <div>
@@ -1542,11 +1609,14 @@ export const Settings: React.FC = () => {
         </div>
 
         {/* 模型配置区块 */}
-        <div>
+        <div id="settings-models" className="rounded-md border border-gray-200 bg-white p-5">
           <h2 className="text-xl font-semibold text-gray-900 dark:text-foreground-primary mb-4 flex items-center">
             <FileText size={20} />
             <span className="ml-2">{t('settings.sections.modelConfig')}</span>
           </h2>
+          <div className="mb-4 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
+            AI 模型分为文本生成、图片生成、图片识别三类；可编辑 PPTX 的视觉结构分析和图层生成应优先走 OpenAI 视觉与 gpt-image-2 主线，Gemini、LazyLLM、百度等作为兼容或专项能力配置。
+          </div>
           <div className="space-y-4">
             {modelConfigItems.map(renderModelConfigGroup)}
           </div>
@@ -1559,7 +1629,11 @@ export const Settings: React.FC = () => {
             section.title !== t('settings.sections.textReasoning') &&
             section.title !== t('settings.sections.imageReasoning')
           ).map((section) => (
-            <div key={section.title}>
+            <div
+              key={section.title}
+              id={section.title === t('settings.sections.mineruConfig') ? 'settings-parsing' : section.title === t('settings.sections.imageConfig') ? 'settings-export' : undefined}
+              className="rounded-md border border-gray-200 bg-white p-5"
+            >
               <h2 className="text-xl font-semibold text-gray-900 dark:text-foreground-primary mb-4 flex items-center">
                 {section.icon}
                 <span className="ml-2">{section.title}</span>
@@ -1572,7 +1646,7 @@ export const Settings: React.FC = () => {
         </div>
 
         {/* 高级设置（折叠区域） */}
-        <div className="border-t border-gray-200 dark:border-border-primary pt-2">
+        <div id="settings-advanced" className="rounded-md border border-gray-200 bg-white p-5">
           <button
             type="button"
             onClick={() => setAdvancedOpen(!advancedOpen)}
@@ -1685,7 +1759,7 @@ export const Settings: React.FC = () => {
         </div>
 
         {/* 服务测试区 */}
-        <div className="space-y-4">
+        <div id="settings-tests" className="space-y-4 rounded-md border border-gray-200 bg-white p-5">
           <h2 className="text-xl font-semibold text-gray-900 dark:text-foreground-primary mb-2 flex items-center">
             <FileText size={20} />
             <span className="ml-2">{t('settings.serviceTest.title')}</span>
@@ -1786,8 +1860,17 @@ export const Settings: React.FC = () => {
           </div>
         </div>
 
+        <div id="settings-overrides" className="rounded-md border border-gray-200 bg-white p-5">
+          <h2 className="text-xl font-semibold text-gray-900 mb-2">项目覆盖</h2>
+          <p className="text-sm leading-6 text-gray-600">
+            全局配置是系统默认行为的唯一入口。项目内仅保留明确覆盖项，例如导出方法、是否允许半成品、视觉结构分析开关和画面比例。后续会在这里展示每个覆盖项的来源、当前值和回退链路。
+          </p>
+        </div>
+          </div>
+        </div>
+
         {/* 操作按钮 */}
-        <div className="flex items-center justify-between pt-4 border-t border-gray-200 dark:border-border-primary">
+        <div className="sticky bottom-0 z-10 flex items-center justify-between rounded-md border border-gray-200 bg-white/95 p-3 shadow-sm backdrop-blur">
           <Button
             variant="secondary"
             icon={<RotateCcw size={18} />}
@@ -1816,22 +1899,7 @@ export const Settings: React.FC = () => {
 const SCROLL_SHOW_THRESHOLD = 300;
 
 export const SettingsPage: React.FC = () => {
-  const navigate = useNavigate();
-  const location = useLocation();
-  const t = useT(settingsI18n);
   const [showTop, setShowTop] = useState(false);
-  const hasInAppBackHistory = typeof window !== 'undefined' && typeof window.history.state?.idx === 'number'
-    ? window.history.state.idx > 0
-    : false;
-  const canNavigateBack = hasInAppBackHistory || Boolean((location.state as { from?: string } | null)?.from);
-
-  const handleBack = () => {
-    if (canNavigateBack) {
-      navigate(-1);
-      return;
-    }
-    navigate('/');
-  };
 
   useEffect(() => {
     const onScroll = () => setShowTop(window.scrollY > SCROLL_SHOW_THRESHOLD);
@@ -1840,35 +1908,8 @@ export const SettingsPage: React.FC = () => {
   }, []);
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-banana-50 dark:from-background-primary to-yellow-50 dark:to-background-primary">
-      <div className="container mx-auto px-4 py-8 max-w-4xl">
-        <Card className="p-6 md:p-8">
-          <div className="space-y-8">
-            {/* 顶部标题 */}
-            <div className="flex items-center justify-between pb-6 border-b border-gray-200 dark:border-border-primary">
-              <div className="flex items-center">
-                <Button
-                  variant="secondary"
-                  icon={<Home size={18} />}
-                  onClick={handleBack}
-                  className="mr-4"
-                >
-                  {t('nav.backToHome')}
-                </Button>
-                <div>
-                  <h1 className="text-2xl font-bold text-gray-900 dark:text-foreground-primary">{t('settings.title')}</h1>
-                  <p className="text-sm text-gray-500 dark:text-foreground-tertiary mt-1">
-                    {t('settings.subtitle')}
-                  </p>
-                </div>
-              </div>
-            </div>
-
-            <Settings />
-          </div>
-        </Card>
-      </div>
-
+    <>
+      <Settings />
       {showTop && (
         <button
           data-testid="back-to-top-button"
@@ -1880,6 +1921,6 @@ export const SettingsPage: React.FC = () => {
           <ArrowUp size={20} />
         </button>
       )}
-    </div>
+    </>
   );
 };
