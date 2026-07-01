@@ -468,6 +468,36 @@ def export_editable_pptx(project_id):
                 503,
             )
 
+        # 读取项目的导出设置；请求参数可作为本次导出的最高优先级覆盖。
+        export_extractor_method = project.export_extractor_method or 'hybrid'
+        export_inpaint_method = project.export_inpaint_method or 'hybrid'
+        enable_icon_subject_extraction = (
+            True if project.enable_icon_subject_extraction is None
+            else bool(project.enable_icon_subject_extraction)
+        )
+        enable_visual_structure_analysis = data.get('enable_visual_structure_analysis')
+        visual_structure_source = 'request_override'
+        if enable_visual_structure_analysis is None:
+            enable_visual_structure_analysis = (
+                True if project.enable_visual_structure_analysis is None
+                else bool(project.enable_visual_structure_analysis)
+            )
+            visual_structure_source = (
+                'project_override'
+                if 'enable_visual_structure_analysis' in project.get_project_override_fields()
+                else 'inherited_or_default'
+            )
+        else:
+            enable_visual_structure_analysis = bool(enable_visual_structure_analysis)
+
+        project_overrides = project.to_dict().get('project_overrides')
+        if project_overrides:
+            visual_field = project_overrides.get('fields', {}).get('enable_visual_structure_analysis')
+            if visual_field:
+                visual_field['value'] = enable_visual_structure_analysis
+                visual_field['source'] = visual_structure_source
+                visual_field['explicit'] = visual_structure_source in {'project_override', 'request_override'}
+
         # Create task record
         task = Task(
             project_id=project_id,
@@ -478,7 +508,25 @@ def export_editable_pptx(project_id):
             'config_source': {
                 key: runtime.public_summary() for key, runtime in runtimes.items()
             },
-            'project_overrides': project.to_dict().get('project_overrides'),
+            'project_overrides': project_overrides,
+            'effective_export_options': {
+                'export_extractor_method': {
+                    'value': export_extractor_method,
+                    'source': 'project_override' if 'export_extractor_method' in project.get_project_override_fields() else 'inherited_or_default',
+                },
+                'export_inpaint_method': {
+                    'value': export_inpaint_method,
+                    'source': 'project_override' if 'export_inpaint_method' in project.get_project_override_fields() else 'inherited_or_default',
+                },
+                'enable_icon_subject_extraction': {
+                    'value': enable_icon_subject_extraction,
+                    'source': 'project_override' if 'enable_icon_subject_extraction' in project.get_project_override_fields() else 'inherited_or_default',
+                },
+                'enable_visual_structure_analysis': {
+                    'value': enable_visual_structure_analysis,
+                    'source': visual_structure_source,
+                },
+            },
         })
         db.session.add(task)
         db.session.commit()
@@ -494,21 +542,6 @@ def export_editable_pptx(project_id):
         # Get Flask app instance for background task
         app = current_app._get_current_object()
         
-        # 读取项目的导出设置
-        export_extractor_method = project.export_extractor_method or 'hybrid'
-        export_inpaint_method = project.export_inpaint_method or 'hybrid'
-        enable_icon_subject_extraction = (
-            True if project.enable_icon_subject_extraction is None
-            else bool(project.enable_icon_subject_extraction)
-        )
-        enable_visual_structure_analysis = data.get('enable_visual_structure_analysis')
-        if enable_visual_structure_analysis is None:
-            enable_visual_structure_analysis = (
-                True if project.enable_visual_structure_analysis is None
-                else bool(project.enable_visual_structure_analysis)
-            )
-        else:
-            enable_visual_structure_analysis = bool(enable_visual_structure_analysis)
         logger.info(
             f"Export settings: extractor={export_extractor_method}, "
             f"inpaint={export_inpaint_method}, "

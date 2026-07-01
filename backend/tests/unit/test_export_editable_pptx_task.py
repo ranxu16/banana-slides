@@ -347,8 +347,48 @@ class TestExportEditablePptxTaskStatusTransition:
             assert task.task_type == "EXPORT_EDITABLE_PPTX"
             assert task.get_progress()['config_source']['visual']['provider'] == 'openai'
             assert task.get_progress()['project_overrides']['fields']['image_aspect_ratio']['source'] == 'inherited_or_default'
+            assert task.get_progress()['effective_export_options']['enable_visual_structure_analysis']['source'] == 'inherited_or_default'
 
         assert submit_task.call_args.kwargs['visual_ai_service'] is visual_service
+
+    def test_export_route_records_request_override_for_visual_structure(self, client):
+        resp = client.post(
+            "/api/projects",
+            json={"creation_type": "idea", "idea_prompt": "visual override test"},
+        )
+        pid = resp.get_json()["data"]["project_id"]
+
+        with client.application.app_context():
+            page = Page(project_id=pid, order_index=0, status="COMPLETED")
+            page.generated_image_path = "fake/slide.png"
+            db.session.add(page)
+            db.session.commit()
+
+        runtime = MagicMock()
+        runtime.public_summary.return_value = {'provider': 'openai', 'model': 'gpt-test'}
+        visual_service = MagicMock(name='isolated-visual-service')
+        with patch(
+            "controllers.export_controller.resolve_user_editable_pptx_ai_runtime",
+            return_value=({'visual': runtime, 'element': runtime}, visual_service),
+        ), patch("services.task_manager.task_manager.submit_task"):
+            response = client.post(
+                f"/api/projects/{pid}/export/editable-pptx",
+                json={"enable_visual_structure_analysis": False},
+            )
+
+        assert response.status_code == 200, response.get_data(as_text=True)
+        task_id = response.get_json()["data"]["task_id"]
+
+        with client.application.app_context():
+            task = Task.query.get(task_id)
+            progress = task.get_progress()
+            visual_field = progress['project_overrides']['fields']['enable_visual_structure_analysis']
+            assert visual_field['value'] is False
+            assert visual_field['source'] == 'request_override'
+            assert progress['effective_export_options']['enable_visual_structure_analysis'] == {
+                'value': False,
+                'source': 'request_override',
+            }
 
     def test_export_route_returns_runtime_reason_without_creating_task(self, client):
         resp = client.post(

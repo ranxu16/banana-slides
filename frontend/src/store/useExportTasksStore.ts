@@ -127,7 +127,11 @@ export const formatProjectOverrideSummary = (projectOverrides?: ProjectOverrides
   if (!projectOverrides?.fields) return [];
   return Object.values(projectOverrides.fields)
     .filter((field) => field.explicit)
-    .map((field) => `${field.label}: ${field.value === true ? '开启' : field.value === false ? '关闭' : field.value ?? '未设置'}`);
+    .map((field) => {
+      const value = field.value === true ? '开启' : field.value === false ? '关闭' : field.value ?? '未设置';
+      const source = sourceLabels[field.source] || (field.source === 'request_override' ? '本次请求' : '项目覆盖');
+      return `${field.label}: ${value} · ${source}`;
+    });
 };
 
 const pollTimeouts = new Map<string, ReturnType<typeof setTimeout>>();

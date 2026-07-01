@@ -1437,3 +1437,13 @@ ui-guangfu-dashboard-redesign
 - 验证：`uv run --python 3.13 pytest backend/tests/unit/test_export_editable_pptx_task.py -k export_route_creates_pending_task_and_returns_task_id -q` 通过，1 test passed；`npm run guard:brand` 通过；`npx eslint src/store/useExportTasksStore.ts src/pages/ExportTasks.tsx src/components/shared/ExportTasksPanel.tsx --ext ts,tsx --max-warnings 20` 通过。
 - 遗留：普通 PPTX/PDF/视频等其他导出任务尚未统一写入项目覆盖摘要；项目覆盖目前主要覆盖导出策略/画面比例，不包含 AI 模型 Provider/Key。
 - 下一步：定义项目覆盖进入 resolver 的字段范围，优先让导出相关任务使用 `project_overrides` 标记来源；AI 模型项目级覆盖需要新增字段后再进入 resolver。
+
+### 2026-07-02 00:45 - 可编辑 PPTX 导出请求覆盖优先级记录
+
+- 范围：`backend/controllers/export_controller.py`、`backend/tests/unit/test_export_editable_pptx_task.py`、`frontend/src/store/useExportTasksStore.ts`、`docs/design/guangfu-zhicheng-design.md`。
+- 动作：可编辑 PPTX 导出在创建任务前统一解析有效导出参数；当请求体临时传入 `enable_visual_structure_analysis` 时，将该字段来源标记为 `request_override`，并把 `effective_export_options` 写入任务进度；前端项目覆盖摘要展示来源标签，能区分“项目覆盖”和“本次请求”。
+- 结果：导出任务记录现在能表达导出参数优先级：本次请求覆盖优先于项目覆盖；没有请求覆盖时，继续按项目显式覆盖或继承/default 展示来源。
+- 计划状态：导出相关项目覆盖来源已经接入可编辑 PPTX 任务，并覆盖请求级最高优先级；AI 模型 runtime 的项目级覆盖仍未实现。
+- 验证：`uv run --python 3.13 pytest backend/tests/unit/test_export_editable_pptx_task.py -k "export_route_creates_pending_task_and_returns_task_id or export_route_records_request_override_for_visual_structure" -q` 通过，2 tests passed；`npm run guard:brand` 通过；`npx eslint src/store/useExportTasksStore.ts src/pages/ExportTasks.tsx src/components/shared/ExportTasksPanel.tsx --ext ts,tsx --max-warnings 20` 通过。
+- 遗留：`effective_export_options` 目前只在可编辑 PPTX 导出任务中记录；普通 PPTX/PDF/视频导出仍需统一；清除项目覆盖仍只清元数据，不回填字段值。
+- 下一步：抽出通用项目导出配置摘要 helper，复用到视频/其他异步导出；随后再评估 AI 模型项目级覆盖字段设计。
