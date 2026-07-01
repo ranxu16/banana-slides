@@ -1322,3 +1322,12 @@ ui-guangfu-dashboard-redesign
 - 完整回归：`uv run --python 3.13 pytest backend/tests/unit -q` 通过，`415 passed / 5 skipped`，覆盖旧图片代理、LazyLLM、OAuth、可编辑 PPTX、任务队列和 runtime 新增测试。
 - 遗留：可编辑 PPTX 视觉拆层仍从全局 AIService 获取 Caption/Image Provider；普通图片识别入口尚未统一接入 caption runtime；个人 LazyLLM 显式凭据适配未完成。
 - 下一步：阶段提交图片 runtime 第一片，再接可编辑 PPTX 的视觉理解和独立元素生成 runtime。
+
+### 2026-07-01 20:40 - 图片 runtime 阶段性提交完成
+
+- 范围：Caption/Image 显式 Provider 工厂、隔离缓存、组合 runtime、图片生成/编辑控制器、任务来源保留、测试与设计记录。
+- 动作：排除 `.DS_Store`，仅暂存本阶段 10 个明确文件并创建独立提交。
+- 结果：提交 `d90f0b4 feat(phase7): isolate image generation runtimes` 已生成，共 10 个文件，312 insertions、37 deletions。
+- 验证：提交前 `git diff --cached --check` 通过；完整后端 unit 回归为 `415 passed / 5 skipped`。
+- 遗留：可编辑 PPTX 的 `editable_pptx_visual`/`editable_pptx_element`、普通图片识别、导出队列 runtime 尚未接入；项目覆盖、密钥加密、用户级 OAuth 和个人 LazyLLM 隔离仍未完成。
+- 下一步：为可编辑 PPTX 构造“Caption 视觉理解 + Image 独立元素生成”组合 runtime，并从导出控制器传入后台任务和 ExportService，移除该流水线对全局 AIService 的依赖。
