@@ -37,13 +37,13 @@ function getNestedValue(obj: NestedRecord, path: string): string | undefined {
  * const homeI18n = {
  *   zh: {
  *     home: {
- *       title: '蕉幻',
+ *       title: '光伏智呈',
  *       messages: { success: '成功' }
  *     }
  *   },
  *   en: {
  *     home: {
- *       title: 'Banana Slides',
+ *       title: 'PV SmartDeck',
  *       messages: { success: 'Success' }
  *     }
  *   }
@@ -51,7 +51,7 @@ function getNestedValue(obj: NestedRecord, path: string): string | undefined {
  * 
  * const t = useT(homeI18n);
  * 
- * t('home.title')     // 从组件内翻译获取: "蕉幻"
+ * t('home.title')     // 从组件内翻译获取: "光伏智呈"
  * t('common.save')    // 组件内没有，自动 fallback 到全局: "保存"
  * ```
  * 
@@ -83,6 +83,6 @@ export function useT<T extends Translations>(translations: T) {
     }
     
     // 组件内没找到，fallback 到全局翻译（保持原始参数传递）
-    return globalT(key, defaultOrParams as any);
+    return String(globalT(key, defaultOrParams as any));
   };
 }

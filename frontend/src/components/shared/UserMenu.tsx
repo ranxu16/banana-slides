@@ -55,7 +55,7 @@ export function UserMenu({ compact = false }: { compact?: boolean }) {
           {user?.is_admin && (
             <>
               <MenuItem icon={<Users size={15} />} label="用户管理" onClick={() => { setOpen(false); navigate('/admin'); }} />
-              <MenuItem icon={<Settings size={15} />} label="系统设置" onClick={() => { setOpen(false); navigate('/settings'); }} />
+              <MenuItem icon={<Settings size={15} />} label="全局配置" onClick={() => { setOpen(false); navigate('/settings'); }} />
             </>
           )}
           <div className="my-1 h-px bg-gray-100 dark:bg-border-primary" />

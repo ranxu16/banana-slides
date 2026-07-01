@@ -1,15 +1,14 @@
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { Sparkles, FileText, FileEdit, ImagePlus, Paperclip, Palette, Lightbulb, Search, Settings, FolderOpen, HelpCircle, Sun, Moon, Globe, Monitor, ChevronDown, Upload, RefreshCw, Users } from 'lucide-react';
-import { Button, Card, useToast, ToastContainer, MaterialGeneratorModal, MaterialCenterModal, MaterialSelector, ReferenceFileList, ReferenceFileSelector, FilePreviewModal, HelpModal, Footer, TextStyleSelector, UserMenu } from '@/components/shared';
+import { Sparkles, FileText, FileEdit, ImagePlus, Paperclip, Palette, Lightbulb, FolderOpen, HelpCircle, ChevronDown, Upload, RefreshCw, Users, Activity, CheckCircle2, Clock, Download, ShieldCheck, AlertCircle } from 'lucide-react';
+import { Button, useToast, ToastContainer, MaterialGeneratorModal, MaterialCenterModal, MaterialSelector, ReferenceFileList, ReferenceFileSelector, FilePreviewModal, HelpModal, TextStyleSelector } from '@/components/shared';
 import { MarkdownTextarea, type MarkdownTextareaRef } from '@/components/shared/MarkdownTextarea';
 import { TemplateSelector, getTemplateFile } from '@/components/shared/TemplateSelector';
 import { listUserTemplates, type UserTemplate, uploadReferenceFile, type ReferenceFile, associateFileToProject, triggerFileParse, associateMaterialsToProject, createPptRenovationProject } from '@/api/endpoints';
 import { useProjectStore } from '@/store/useProjectStore';
 import { useAuthStore } from '@/store/useAuthStore';
 import { devLog } from '@/utils/logger';
-import { useTheme } from '@/hooks/useTheme';
 import { useImagePaste, buildMaterialsMarkdown } from '@/hooks/useImagePaste';
 import type { Material } from '@/types';
 import { useT } from '@/hooks/useT';
@@ -32,9 +31,9 @@ const homeI18n = {
       theme: { label: '主题模式', light: '浅色', dark: '深色', system: '跟随系统' }
     },
     home: {
-      title: '蕉幻',
-      subtitle: 'Vibe your slides like vibe coding',
-      tagline: '基于 nano banana pro🍌 的原生 AI PPT 生成器',
+      title: '光伏智呈',
+      subtitle: '地面光伏事业部 AI 汇报生成平台',
+      tagline: '基于 ChatGPT/OpenAI 能力的光伏业务汇报生成工作台',
       features: {
         oneClick: '一句话生成 PPT',
         naturalEdit: '自然语言修改',
@@ -110,9 +109,9 @@ const homeI18n = {
       theme: { label: 'Theme', light: 'Light', dark: 'Dark', system: 'System' }
     },
     home: {
-      title: 'Banana Slides',
-      subtitle: 'Vibe your slides like vibe coding',
-      tagline: 'AI-native PPT generator powered by nano banana pro🍌',
+      title: 'PV SmartDeck',
+      subtitle: 'AI report generation platform for photovoltaic business',
+      tagline: 'AI-native presentation workspace powered by ChatGPT/OpenAI capabilities',
       features: {
         oneClick: 'One-click PPT generation',
         naturalEdit: 'Natural language editing',
@@ -184,7 +183,6 @@ export const Home: React.FC = () => {
   const navigate = useNavigate();
   const { i18n } = useTranslation();
   const t = useT(homeI18n); // 组件内翻译 + 自动 fallback 到全局
-  const { theme, isDark, setTheme } = useTheme();
   const { initializeProject, isGlobalLoading } = useProjectStore();
   const { user } = useAuthStore();
   const { show, toasts: homeToasts, remove: homeRemove } = useToast();
@@ -197,7 +195,6 @@ export const Home: React.FC = () => {
   const [isMaterialModalOpen, setIsMaterialModalOpen] = useState(false);
   const [isMaterialCenterOpen, setIsMaterialCenterOpen] = useState(false);
   const [isHelpModalOpen, setIsHelpModalOpen] = useState(false);
-  const [isThemeMenuOpen, setIsThemeMenuOpen] = useState(false);
   const [currentProjectId, setCurrentProjectId] = useState<string | null>(null);
   const [userTemplates, setUserTemplates] = useState<UserTemplate[]>([]);
   const [referenceFiles, setReferenceFiles] = useState<ReferenceFile[]>([]);
@@ -213,7 +210,6 @@ export const Home: React.FC = () => {
   const [keepLayout, setKeepLayout] = useState(false);
   const renovationFileInputRef = useRef<HTMLInputElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const themeMenuRef = useRef<HTMLDivElement>(null);
 
   // 持久化草稿到 sessionStorage，确保跳转设置页后返回时内容不丢失
   useEffect(() => {
@@ -687,247 +683,110 @@ export const Home: React.FC = () => {
     }
   };
 
+  const hasParsingFiles = referenceFiles.some(f => f.parse_status === 'pending' || f.parse_status === 'parsing');
+  const completedReferenceCount = referenceFiles.filter(f => f.parse_status === 'completed').length;
+  const dashboardStats = [
+    { label: '创建入口', value: '4', hint: '一句话 / 大纲 / 描述 / 翻新', icon: Sparkles },
+    { label: '参考文件', value: String(referenceFiles.length), hint: `${completedReferenceCount} 个可用于生成`, icon: Paperclip },
+    { label: '素材入口', value: '2', hint: '生成素材与素材中心', icon: ImagePlus },
+    { label: '模型主线', value: 'OpenAI', hint: 'ChatGPT / gpt-image-2', icon: ShieldCheck },
+  ];
+
   return (
-    <div className="min-h-screen bg-gradient-to-br from-yellow-50 via-orange-50/30 to-pink-50/50 dark:from-background-primary dark:via-background-primary dark:to-background-primary relative overflow-hidden">
-      {/* 背景装饰元素 - 仅在亮色模式显示 */}
-      <div className="absolute inset-0 overflow-hidden pointer-events-none dark:hidden">
-        <div className="absolute -top-40 -right-40 w-80 h-80 bg-banana-500/10 rounded-full blur-3xl animate-pulse"></div>
-        <div className="absolute -bottom-40 -left-40 w-96 h-96 bg-orange-400/10 rounded-full blur-3xl animate-pulse" style={{ animationDelay: '1s' }}></div>
-        <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-72 h-72 bg-yellow-400/5 rounded-full blur-3xl"></div>
-      </div>
-
-      {/* 导航栏 */}
-      <nav className="relative z-50 h-16 md:h-18 bg-white/40 dark:bg-background-primary backdrop-blur-2xl dark:backdrop-blur-none dark:border-b dark:border-border-primary">
-
-        <div className="max-w-7xl mx-auto px-4 md:px-6 h-full flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="flex items-center">
-              <img
-                src="/logo.png"
-                alt="蕉幻 Banana Slides Logo"
-                className="h-10 md:h-12 w-auto rounded-lg object-contain"
-              />
-            </div>
-            <span className="text-xl md:text-2xl font-bold bg-gradient-to-r from-banana-600 via-orange-500 to-pink-500 bg-clip-text text-transparent">
-              蕉幻
-            </span>
+    <div className="space-y-6">
+      <section className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+        <div>
+          <div className="mb-2 inline-flex items-center gap-2 rounded-md border border-amber-200 bg-amber-50 px-2.5 py-1 text-xs font-medium text-amber-700">
+            <Activity size={14} />
+            基于 ChatGPT/OpenAI 能力的光伏业务汇报生成工作台
           </div>
-          <div className="flex items-center gap-2 md:gap-3">
-            {/* 桌面端：带文字的素材生成按钮 */}
-            <Button
-              variant="ghost"
-              size="sm"
-              icon={<ImagePlus size={16} className="md:w-[18px] md:h-[18px]" />}
-              onClick={handleOpenMaterialModal}
-              className="hidden sm:inline-flex hover:bg-banana-100/60 hover:shadow-sm hover:scale-105 transition-all duration-200 font-medium"
-            >
-              <span className="hidden md:inline">{t('nav.materialGenerate')}</span>
-            </Button>
-            {/* 手机端：仅图标的素材生成按钮 */}
-            <Button
-              variant="ghost"
-              size="sm"
-              icon={<ImagePlus size={16} />}
-              onClick={handleOpenMaterialModal}
-              className="sm:hidden hover:bg-banana-100/60 hover:shadow-sm hover:scale-105 transition-all duration-200"
-              title={t('nav.materialGenerate')}
-            />
-            {/* 桌面端：带文字的素材中心按钮 */}
-            <Button
-              variant="ghost"
-              size="sm"
-              icon={<FolderOpen size={16} className="md:w-[18px] md:h-[18px]" />}
-              onClick={() => setIsMaterialCenterOpen(true)}
-              className="hidden sm:inline-flex hover:bg-banana-100/60 hover:shadow-sm hover:scale-105 transition-all duration-200 font-medium"
-            >
-              <span className="hidden md:inline">{t('nav.materialCenter')}</span>
-            </Button>
-            {/* 手机端：仅图标的素材中心按钮 */}
-            <Button
-              variant="ghost"
-              size="sm"
-              icon={<FolderOpen size={16} />}
-              onClick={() => setIsMaterialCenterOpen(true)}
-              className="sm:hidden hover:bg-banana-100/60 hover:shadow-sm hover:scale-105 transition-all duration-200"
-              title={t('nav.materialCenter')}
-            />
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => navigate('/history')}
-              className="text-xs md:text-sm hover:bg-banana-100/60 hover:shadow-sm hover:scale-105 transition-all duration-200 font-medium"
-            >
-              <span className="hidden sm:inline">{t('nav.history')}</span>
-              <span className="sm:hidden">{t('nav.history')}</span>
-            </Button>
-            {user?.is_admin && (
-              <>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  icon={<Users size={16} className="md:w-[18px] md:h-[18px]" />}
-                  onClick={() => navigate('/admin')}
-                  className="text-xs md:text-sm hover:bg-banana-100/60 hover:shadow-sm hover:scale-105 transition-all duration-200 font-medium"
-                >
-                  <span className="hidden lg:inline">用户管理</span>
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  icon={<Settings size={16} className="md:w-[18px] md:h-[18px]" />}
-                  onClick={() => navigate('/settings')}
-                  className="text-xs md:text-sm hover:bg-banana-100/60 hover:shadow-sm hover:scale-105 transition-all duration-200 font-medium"
-                >
-                  <span className="hidden md:inline">{t('nav.settings')}</span>
-                </Button>
-              </>
-            )}
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => setIsHelpModalOpen(true)}
-              className="hidden md:inline-flex hover:bg-banana-50/50"
-            >
-              {t('nav.help')}
-            </Button>
-            {/* 移动端帮助按钮 */}
-            <Button
-              variant="ghost"
-              size="sm"
-              icon={<HelpCircle size={16} />}
-              onClick={() => setIsHelpModalOpen(true)}
-              className="md:hidden hover:bg-banana-100/60 hover:shadow-sm hover:scale-105 transition-all duration-200"
-              title={t('nav.help')}
-            />
-            {/* 分隔线 */}
-            <div className="h-5 w-px bg-gray-300 dark:bg-border-primary mx-1" />
-            <UserMenu />
-            {/* 分隔线 */}
-            <div className="h-5 w-px bg-gray-300 dark:bg-border-primary mx-1 hidden md:block" />
-            {/* 语言切换按钮 */}
-            <button
-              onClick={() => i18n.changeLanguage(i18n.language?.startsWith('zh') ? 'en' : 'zh')}
-              className="flex items-center gap-1 px-2 py-1 text-xs font-medium text-gray-600 dark:text-foreground-tertiary hover:text-gray-900 dark:hover:text-gray-100 hover:bg-banana-100/60 dark:hover:bg-background-hover rounded-md transition-all"
-              title={t('settings.language.label')}
-            >
-              <Globe size={14} />
-              <span>{i18n.language?.startsWith('zh') ? 'EN' : '中'}</span>
-            </button>
-            {/* 主题切换按钮 */}
-            <div className="relative" ref={themeMenuRef}>
-              <button
-                onClick={() => setIsThemeMenuOpen(!isThemeMenuOpen)}
-                className="flex items-center gap-1 p-1.5 text-gray-600 dark:text-foreground-tertiary hover:text-gray-900 dark:hover:text-gray-100 hover:bg-banana-100/60 dark:hover:bg-background-hover rounded-md transition-all"
-                title={t('settings.theme.label')}
-              >
-                {theme === 'system' ? <Monitor size={16} /> : isDark ? <Moon size={16} /> : <Sun size={16} />}
-                <ChevronDown size={12} className={`transition-transform ${isThemeMenuOpen ? 'rotate-180' : ''}`} />
-              </button>
-              {/* 主题下拉菜单 */}
-              {isThemeMenuOpen && (
-                <>
-                  <div className="fixed inset-0 z-40" onClick={() => setIsThemeMenuOpen(false)} />
-                  <div className="absolute right-0 top-full mt-1 z-50 bg-white dark:bg-background-secondary border border-gray-200 dark:border-border-primary rounded-lg shadow-lg dark:shadow-none py-1 min-w-[120px]">
+          <h1 className="text-[22px] font-semibold leading-tight text-gray-900">工作台</h1>
+          <p className="mt-1 text-sm text-gray-500">创建汇报、继续项目、查看任务状态和管理常用资源。</p>
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          <Button variant="secondary" size="sm" icon={<ImagePlus size={16} />} onClick={handleOpenMaterialModal}>
+            素材生成
+          </Button>
+          <Button variant="secondary" size="sm" icon={<FolderOpen size={16} />} onClick={() => setIsMaterialCenterOpen(true)}>
+            素材中心
+          </Button>
+          <Button variant="secondary" size="sm" icon={<HelpCircle size={16} />} onClick={() => setIsHelpModalOpen(true)}>
+            帮助
+          </Button>
+        </div>
+      </section>
+
+      <section className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+        {dashboardStats.map((stat) => {
+          const Icon = stat.icon;
+          return (
+            <div key={stat.label} className="rounded-lg border border-gray-200 bg-white p-4 shadow-sm">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <p className="text-xs font-medium text-gray-500">{stat.label}</p>
+                  <p className="mt-1 text-xl font-semibold text-gray-900">{stat.value}</p>
+                </div>
+                <div className="rounded-md bg-amber-50 p-2 text-amber-700">
+                  <Icon size={18} />
+                </div>
+              </div>
+              <p className="mt-2 text-xs text-gray-500">{stat.hint}</p>
+            </div>
+          );
+        })}
+      </section>
+
+      <section className="grid gap-6 xl:grid-cols-[minmax(0,1.5fr)_minmax(320px,0.8fr)]">
+        <div className="rounded-lg border border-gray-200 bg-white shadow-sm">
+          <div className="border-b border-gray-100 px-5 py-4">
+            <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+              <div>
+                <h2 className="text-base font-semibold text-gray-900">快捷创建汇报</h2>
+                <p className="mt-1 text-sm text-gray-500">{tabConfig[activeTab].description}</p>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                {(Object.keys(tabConfig) as CreationType[]).map((type) => {
+                  const config = tabConfig[type];
+                  return (
                     <button
-                      onClick={() => { setTheme('light'); setIsThemeMenuOpen(false); }}
-                      className={`w-full flex items-center gap-2 px-3 py-2 text-sm hover:bg-gray-100 dark:hover:bg-background-hover transition-colors ${theme === 'light' ? 'text-banana' : 'text-gray-700 dark:text-foreground-secondary'}`}
+                      key={type}
+                      type="button"
+                      onClick={() => setActiveTab(type)}
+                      className={`inline-flex h-9 items-center gap-2 rounded-md border px-3 text-sm font-medium transition-colors ${
+                        activeTab === type
+                          ? 'border-amber-400 bg-amber-50 text-amber-800'
+                          : 'border-gray-200 bg-white text-gray-600 hover:border-gray-300 hover:bg-gray-50'
+                      }`}
                     >
-                      <Sun size={14} />
-                      <span>{t('settings.theme.light')}</span>
+                      {config.icon}
+                      <span>{config.label}</span>
                     </button>
-                    <button
-                      onClick={() => { setTheme('dark'); setIsThemeMenuOpen(false); }}
-                      className={`w-full flex items-center gap-2 px-3 py-2 text-sm hover:bg-gray-100 dark:hover:bg-background-hover transition-colors ${theme === 'dark' ? 'text-banana' : 'text-gray-700 dark:text-foreground-secondary'}`}
-                    >
-                      <Moon size={14} />
-                      <span>{t('settings.theme.dark')}</span>
-                    </button>
-                    <button
-                      onClick={() => { setTheme('system'); setIsThemeMenuOpen(false); }}
-                      className={`w-full flex items-center gap-2 px-3 py-2 text-sm hover:bg-gray-100 dark:hover:bg-background-hover transition-colors ${theme === 'system' ? 'text-banana' : 'text-gray-700 dark:text-foreground-secondary'}`}
-                    >
-                      <Monitor size={14} />
-                      <span>{t('settings.theme.system')}</span>
-                    </button>
-                  </div>
-                </>
-              )}
+                  );
+                })}
+              </div>
             </div>
           </div>
-        </div>
-      </nav>
 
-      {/* 主内容 */}
-      <main className="relative max-w-5xl mx-auto px-3 md:px-4 py-6 md:py-10">
-        <div className="flex flex-wrap items-center justify-center gap-2 md:gap-3 mb-8 md:mb-10">
-            {[
-              { icon: <Sparkles size={14} className="text-yellow-600 dark:text-banana" />, label: t('home.features.oneClick') },
-              { icon: <FileEdit size={14} className="text-blue-500 dark:text-blue-400" />, label: t('home.features.naturalEdit') },
-              { icon: <Search size={14} className="text-orange-500 dark:text-orange-400" />, label: t('home.features.regionEdit') },
-
-              { icon: <Paperclip size={14} className="text-green-600 dark:text-green-400" />, label: t('home.features.export') },
-            ].map((feature, idx) => (
-              <span
-                key={idx}
-                className="inline-flex items-center gap-1 px-3 py-1.5 bg-white/70 dark:bg-background-secondary backdrop-blur-sm rounded-full text-xs md:text-sm text-gray-700 dark:text-foreground-secondary border border-gray-200/50 dark:border-border-primary shadow-sm dark:shadow-none hover:shadow-md dark:hover:border-border-hover transition-all hover:scale-105 cursor-default"
-              >
-                {feature.icon}
-                {feature.label}
-              </span>
-            ))}
-        </div>
-
-        {/* 创建卡片 */}
-        <Card className="p-4 md:p-10 bg-white/90 dark:bg-background-secondary backdrop-blur-xl dark:backdrop-blur-none shadow-2xl dark:shadow-none border-0 dark:border dark:border-border-primary hover:shadow-3xl dark:hover:shadow-none transition-all duration-300 dark:rounded-2xl">
-          {/* 选项卡 */}
-          <div className="flex flex-col sm:flex-row gap-2 sm:gap-4 mb-6 md:mb-8">
-            {(Object.keys(tabConfig) as CreationType[]).map((type) => {
-              const config = tabConfig[type];
-              return (
-                <button
-                  key={type}
-                  onClick={() => setActiveTab(type)}
-                  className={`flex-1 flex items-center justify-center gap-1.5 md:gap-2 px-3 md:px-6 py-2.5 md:py-3 rounded-lg dark:rounded-xl font-medium transition-all text-sm md:text-base touch-manipulation ${
-                    activeTab === type
-                      ? 'bg-gradient-to-r from-banana-500 to-banana-600 dark:from-banana dark:to-banana text-black shadow-yellow dark:shadow-lg dark:shadow-banana/20'
-                      : 'bg-white dark:bg-background-elevated border border-gray-200 dark:border-border-primary text-gray-700 dark:text-foreground-secondary hover:bg-banana-50 dark:hover:bg-background-hover active:bg-banana-100'
-                  }`}
-                >
-                  <span className="scale-90 md:scale-100">{config.icon}</span>
-                  <span className="truncate">{config.label}</span>
-                </button>
-              );
-            })}
-          </div>
-
-          {/* 描述 */}
-          <div className="relative">
-            <p className="text-sm md:text-base mb-4 md:mb-6 leading-relaxed">
-              <span className="inline-flex items-center gap-2 text-gray-600 dark:text-foreground-tertiary">
-                <Lightbulb size={16} className="text-banana-600 dark:text-banana flex-shrink-0" />
-                <span className="font-semibold">
-                  {tabConfig[activeTab].description}
-                </span>
+          <div className="space-y-4 p-5">
+            <div className="flex items-start gap-2 rounded-md border border-blue-100 bg-blue-50 px-3 py-2 text-sm text-blue-800">
+              <Lightbulb size={16} className="mt-0.5 flex-shrink-0" />
+              <span className="leading-5">
+                {tabConfig[activeTab].description}
                 {tabConfig[activeTab].example && (
-                  <span className="relative group/tip inline-flex">
-                    <HelpCircle size={15} className="text-gray-400 dark:text-foreground-tertiary hover:text-banana-600 dark:hover:text-banana cursor-help transition-colors" />
-                    <span className="absolute left-1/2 -translate-x-1/2 bottom-full mb-2 hidden group-hover/tip:block z-50 w-72 md:w-80 p-3 bg-white dark:bg-background-elevated border border-gray-200 dark:border-border-primary rounded-lg shadow-xl dark:shadow-none text-xs text-gray-700 dark:text-foreground-secondary whitespace-pre-line leading-relaxed">
+                  <span className="relative group ml-2 inline-flex align-middle">
+                    <HelpCircle size={15} className="cursor-help text-blue-500" />
+                    <span className="absolute left-1/2 top-full z-50 mt-2 hidden w-80 -translate-x-1/2 whitespace-pre-line rounded-md border border-gray-200 bg-white p-3 text-xs leading-5 text-gray-700 shadow-lg group-hover:block">
                       {tabConfig[activeTab].example}
-                      <span className="absolute left-1/2 -translate-x-1/2 top-full -mt-px w-2 h-2 bg-white dark:bg-background-elevated border-r border-b border-gray-200 dark:border-border-primary rotate-45" />
                     </span>
                   </span>
                 )}
               </span>
-            </p>
-          </div>
+            </div>
 
-          {/* 输入区 - 带工具栏 */}
-          <div className="mb-2">
             {activeTab === 'ppt_renovation' ? (
-              /* PPT 翻新：文件上传区 */
               <div className="space-y-4">
                 <div
-                  className="border-2 border-dashed border-gray-300 dark:border-border-primary rounded-xl p-8 text-center cursor-pointer hover:border-banana-400 dark:hover:border-banana transition-colors duration-200"
+                  className="cursor-pointer rounded-lg border-2 border-dashed border-gray-300 bg-gray-50 p-8 text-center transition-colors hover:border-amber-400 hover:bg-amber-50/40"
                   onClick={() => renovationFileInputRef.current?.click()}
                   onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); }}
                   onDrop={(e) => {
@@ -947,24 +806,24 @@ export const Home: React.FC = () => {
                 >
                   {renovationFile ? (
                     <div className="flex items-center justify-center gap-3">
-                      <FileText size={24} className="text-banana-600 dark:text-banana" />
+                      <FileText size={24} className="text-amber-600" />
                       <div className="text-left">
-                        <p className="text-sm font-medium text-gray-900 dark:text-white">{renovationFile.name}</p>
-                        <p className="text-xs text-gray-500 dark:text-foreground-tertiary">{(renovationFile.size / 1024 / 1024).toFixed(1)} MB</p>
+                        <p className="text-sm font-medium text-gray-900">{renovationFile.name}</p>
+                        <p className="text-xs text-gray-500">{(renovationFile.size / 1024 / 1024).toFixed(1)} MB</p>
                       </div>
                       <button
                         type="button"
                         onClick={(e) => { e.stopPropagation(); setRenovationFile(null); }}
-                        className="ml-2 text-gray-400 hover:text-red-500 transition-colors"
+                        className="ml-2 text-gray-400 transition-colors hover:text-red-500"
                       >
-                        ✕
+                        ×
                       </button>
                     </div>
                   ) : (
                     <div className="space-y-2">
-                      <Upload size={32} className="mx-auto text-gray-400 dark:text-foreground-tertiary" />
-                      <p className="text-sm text-gray-600 dark:text-foreground-secondary">{t('home.renovation.uploadHint')}</p>
-                      <p className="text-xs text-gray-400 dark:text-foreground-tertiary">{t('home.renovation.formatHint')}</p>
+                      <Upload size={32} className="mx-auto text-gray-400" />
+                      <p className="text-sm text-gray-700">{t('home.renovation.uploadHint')}</p>
+                      <p className="text-xs text-gray-500">{t('home.renovation.formatHint')}</p>
                     </div>
                   )}
                 </div>
@@ -985,220 +844,236 @@ export const Home: React.FC = () => {
                   }}
                   className="hidden"
                 />
-
-                {/* 保留布局 toggle */}
                 <div className="flex items-center justify-between">
-                  <label className="flex items-center gap-2 cursor-pointer group">
-                    <span className="text-sm text-gray-600 dark:text-foreground-tertiary group-hover:text-gray-900 dark:group-hover:text-white transition-colors">
-                      {t('home.renovation.keepLayout')}
-                    </span>
-                    <div className="relative">
-                      <input
-                        type="checkbox"
-                        checked={keepLayout}
-                        onChange={(e) => setKeepLayout(e.target.checked)}
-                        className="sr-only peer"
-                      />
-                      <div className="w-11 h-6 bg-gray-200 dark:bg-background-hover peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-banana-300 dark:peer-focus:ring-banana/30 rounded-full peer peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white dark:after:bg-foreground-secondary after:border-gray-300 dark:after:border-border-hover after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-banana"></div>
-                    </div>
+                  <label className="flex cursor-pointer items-center gap-2">
+                    <input
+                      type="checkbox"
+                      checked={keepLayout}
+                      onChange={(e) => setKeepLayout(e.target.checked)}
+                      className="h-4 w-4 rounded border-gray-300 text-amber-600 focus:ring-amber-500"
+                    />
+                    <span className="text-sm text-gray-600">{t('home.renovation.keepLayout')}</span>
                   </label>
-                  <Button
-                    size="sm"
-                    onClick={handleSubmit}
-                    loading={isSubmitting || isGlobalLoading}
-                    disabled={!renovationFile}
-                    className="shadow-sm dark:shadow-background-primary/30 text-xs md:text-sm px-3 md:px-4"
-                  >
+                  <Button size="sm" onClick={handleSubmit} loading={isSubmitting || isGlobalLoading} disabled={!renovationFile}>
                     {t('common.next')}
                   </Button>
                 </div>
               </div>
             ) : (
-            <MarkdownTextarea
-              ref={textareaRef}
-              placeholder={tabConfig[activeTab].placeholder}
-              value={content}
-              onChange={setContent}
-              onPaste={handlePaste}
-              onFiles={handleImageFiles}
-              onDocumentFiles={handleDocumentFiles}
-              onSelectFromLibrary={() => setIsMaterialSelectorOpen(true)}
-              rows={activeTab === 'idea' ? 4 : 8}
-              className="text-sm md:text-base border-2 border-gray-200 dark:border-border-primary dark:bg-background-tertiary dark:text-white focus-within:border-banana-400 dark:focus-within:border-banana transition-colors duration-200"
-              toolbarLeft={
-                <div className="flex items-center gap-1">
-                  <button
-                    type="button"
-                    onClick={handlePaperclipClick}
-                    className="p-1.5 text-gray-400 hover:text-gray-600 hover:bg-gray-100 dark:text-foreground-tertiary dark:hover:text-foreground-secondary dark:hover:bg-background-hover rounded transition-colors active:scale-95 touch-manipulation"
-                    title={t('home.actions.selectFile')}
-                  >
-                    <Paperclip size={18} />
-                  </button>
-                  {/* 画面比例选择 */}
-                  <div className="relative">
+              <MarkdownTextarea
+                ref={textareaRef}
+                placeholder={tabConfig[activeTab].placeholder}
+                value={content}
+                onChange={setContent}
+                onPaste={handlePaste}
+                onFiles={handleImageFiles}
+                onDocumentFiles={handleDocumentFiles}
+                onSelectFromLibrary={() => setIsMaterialSelectorOpen(true)}
+                rows={activeTab === 'idea' ? 4 : 8}
+                className="text-sm md:text-base"
+                toolbarLeft={
+                  <div className="flex items-center gap-1">
                     <button
                       type="button"
-                      onClick={() => setIsAspectRatioOpen(!isAspectRatioOpen)}
-                      className="flex items-center gap-1 px-2 py-1 text-xs font-medium text-gray-400 hover:text-gray-600 hover:bg-gray-100 dark:text-foreground-tertiary dark:hover:text-foreground-secondary dark:hover:bg-background-hover rounded transition-colors"
-                      title={i18n.language?.startsWith('zh') ? '画面比例' : 'Aspect Ratio'}
+                      onClick={handlePaperclipClick}
+                      className="rounded p-1.5 text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-600"
+                      title={t('home.actions.selectFile')}
                     >
-                      <span>{aspectRatio}</span>
-                      <ChevronDown size={12} className={`transition-transform ${isAspectRatioOpen ? 'rotate-180' : ''}`} />
+                      <Paperclip size={18} />
                     </button>
-                    {isAspectRatioOpen && (
-                      <>
-                        <div className="fixed inset-0 z-40" onClick={() => setIsAspectRatioOpen(false)} />
-                        <div className="absolute left-0 bottom-full mb-1 z-50 bg-white dark:bg-background-elevated border border-gray-200 dark:border-border-primary rounded-lg shadow-lg dark:shadow-none py-1 min-w-[80px]">
-                          {ASPECT_RATIO_OPTIONS.map((opt) => (
-                            <button
-                              key={opt.value}
-                              onClick={() => { setAspectRatio(opt.value); setIsAspectRatioOpen(false); }}
-                              className={`w-full text-left px-3 py-1.5 text-xs hover:bg-gray-100 dark:hover:bg-background-hover transition-colors ${aspectRatio === opt.value ? 'text-banana font-semibold' : 'text-gray-700 dark:text-foreground-secondary'}`}
-                            >
-                              {opt.label}
-                            </button>
-                          ))}
-                        </div>
-                      </>
-                    )}
+                    <div className="relative">
+                      <button
+                        type="button"
+                        onClick={() => setIsAspectRatioOpen(!isAspectRatioOpen)}
+                        className="flex items-center gap-1 rounded px-2 py-1 text-xs font-medium text-gray-500 transition-colors hover:bg-gray-100 hover:text-gray-700"
+                        title={i18n.language?.startsWith('zh') ? '画面比例' : 'Aspect Ratio'}
+                      >
+                        <span>{aspectRatio}</span>
+                        <ChevronDown size={12} className={`transition-transform ${isAspectRatioOpen ? 'rotate-180' : ''}`} />
+                      </button>
+                      {isAspectRatioOpen && (
+                        <>
+                          <div className="fixed inset-0 z-40" onClick={() => setIsAspectRatioOpen(false)} />
+                          <div className="absolute bottom-full left-0 z-50 mb-1 min-w-[80px] rounded-md border border-gray-200 bg-white py-1 shadow-lg">
+                            {ASPECT_RATIO_OPTIONS.map((opt) => (
+                              <button
+                                key={opt.value}
+                                onClick={() => { setAspectRatio(opt.value); setIsAspectRatioOpen(false); }}
+                                className={`w-full px-3 py-1.5 text-left text-xs transition-colors hover:bg-gray-100 ${aspectRatio === opt.value ? 'font-semibold text-amber-700' : 'text-gray-700'}`}
+                              >
+                                {opt.label}
+                              </button>
+                            ))}
+                          </div>
+                        </>
+                      )}
+                    </div>
                   </div>
-                </div>
-              }
-              toolbarRight={
-                <Button
-                  size="sm"
-                  onClick={handleSubmit}
-                  loading={isSubmitting || isGlobalLoading}
-                  disabled={
-                    !content.trim() ||
-                    isUploadingImage ||
-                    referenceFiles.some(f => f.parse_status === 'pending' || f.parse_status === 'parsing')
-                  }
-                  className="shadow-sm dark:shadow-background-primary/30 text-xs md:text-sm px-3 md:px-4"
-                >
-                  {referenceFiles.some(f => f.parse_status === 'pending' || f.parse_status === 'parsing')
-                    ? t('home.actions.parsing')
-                    : t('common.next')}
-                </Button>
-              }
-            />
+                }
+                toolbarRight={
+                  <Button
+                    size="sm"
+                    onClick={handleSubmit}
+                    loading={isSubmitting || isGlobalLoading}
+                    disabled={!content.trim() || isUploadingImage || hasParsingFiles}
+                  >
+                    {hasParsingFiles ? t('home.actions.parsing') : t('common.next')}
+                  </Button>
+                }
+              />
             )}
+
+            <input
+              ref={fileInputRef}
+              type="file"
+              multiple
+              accept=".pdf,.doc,.docx,.ppt,.pptx,.xls,.xlsx,.csv,.txt,.md"
+              onChange={handleFileSelect}
+              className="hidden"
+            />
+
+            <ReferenceFileList
+              files={referenceFiles}
+              onFileClick={setPreviewFileId}
+              onFileDelete={handleFileRemove}
+              onFileStatusChange={handleFileStatusChange}
+              deleteMode="remove"
+              showToast={show}
+            />
           </div>
+        </div>
 
-          {/* 隐藏的文件输入 */}
-          <input
-            ref={fileInputRef}
-            type="file"
-            multiple
-            accept=".pdf,.doc,.docx,.ppt,.pptx,.xls,.xlsx,.csv,.txt,.md"
-            onChange={handleFileSelect}
-            className="hidden"
-          />
-
-          <ReferenceFileList
-            files={referenceFiles}
-            onFileClick={setPreviewFileId}
-            onFileDelete={handleFileRemove}
-            onFileStatusChange={handleFileStatusChange}
-            deleteMode="remove"
-            className="mb-4"
-            showToast={show}
-          />
-
-          {/* 模板选择 */}
-          <div className="mb-6 md:mb-8 pt-4 border-t border-gray-100 dark:border-border-primary">
-            <div className="flex items-center justify-between mb-3 md:mb-4">
+        <aside className="space-y-6">
+          <div className="rounded-lg border border-gray-200 bg-white p-5 shadow-sm">
+            <div className="mb-4 flex items-center justify-between">
               <div className="flex items-center gap-2">
-                <Palette size={18} className="text-orange-600 dark:text-banana flex-shrink-0" />
-                <h3 className="text-base md:text-lg font-semibold text-gray-900 dark:text-white">
-                  {t('home.template.title')}
-                </h3>
+                <Palette size={18} className="text-amber-600" />
+                <h2 className="text-base font-semibold text-gray-900">{t('home.template.title')}</h2>
               </div>
-              {/* 无模板图模式开关 */}
-              <label className="flex items-center gap-2 cursor-pointer group">
-                <span className="text-sm text-gray-600 dark:text-foreground-tertiary group-hover:text-gray-900 dark:group-hover:text-white transition-colors">
-                  {t('home.template.useTextStyle')}
-                </span>
-                <div className="relative">
-                  <input
-                    type="checkbox"
-                    checked={useTemplateStyle}
-                    onChange={(e) => {
-                      setUseTemplateStyle(e.target.checked);
-                      // 切换到无模板图模式时，清空模板选择
-                      if (e.target.checked) {
-                        setSelectedTemplate(null);
-                        setSelectedTemplateId(null);
-                        setSelectedPresetTemplateId(null);
-                      }
-                      // 不再清空风格描述，允许用户保留已输入的内容
-                    }}
-                    className="sr-only peer"
-                  />
-                  <div className="w-11 h-6 bg-gray-200 dark:bg-background-hover peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-banana-300 dark:peer-focus:ring-banana/30 rounded-full peer peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white dark:after:bg-foreground-secondary after:border-gray-300 dark:after:border-border-hover after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-banana"></div>
-                </div>
+              <label className="flex cursor-pointer items-center gap-2 text-sm text-gray-600">
+                <input
+                  type="checkbox"
+                  checked={useTemplateStyle}
+                  onChange={(e) => {
+                    setUseTemplateStyle(e.target.checked);
+                    if (e.target.checked) {
+                      setSelectedTemplate(null);
+                      setSelectedTemplateId(null);
+                      setSelectedPresetTemplateId(null);
+                    }
+                  }}
+                  className="h-4 w-4 rounded border-gray-300 text-amber-600 focus:ring-amber-500"
+                />
+                {t('home.template.useTextStyle')}
               </label>
             </div>
-            
-            {/* 根据模式显示不同的内容 */}
             {useTemplateStyle ? (
-              <TextStyleSelector
-                value={templateStyle}
-                onChange={setTemplateStyle}
-                onToast={show}
-              />
+              <TextStyleSelector value={templateStyle} onChange={setTemplateStyle} onToast={show} />
             ) : (
               <TemplateSelector
                 onSelect={handleTemplateSelect}
                 selectedTemplateId={selectedTemplateId}
                 selectedPresetTemplateId={selectedPresetTemplateId}
-                showUpload={true} // 在主页上传的模板保存到用户模板库
+                showUpload
                 projectId={currentProjectId}
               />
             )}
           </div>
 
-        </Card>
-      </main>
+          <div className="rounded-lg border border-gray-200 bg-white p-5 shadow-sm">
+            <div className="mb-4 flex items-center justify-between">
+              <h2 className="text-base font-semibold text-gray-900">最近项目</h2>
+              <button type="button" onClick={() => navigate('/history')} className="text-sm font-medium text-amber-700 hover:text-amber-800">
+                查看全部
+              </button>
+            </div>
+            {currentProjectId ? (
+              <div className="rounded-md border border-gray-200 bg-gray-50 p-3">
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <p className="text-sm font-medium text-gray-900">当前项目</p>
+                    <p className="mt-1 text-xs text-gray-500">ID: {currentProjectId.slice(0, 8)}...</p>
+                  </div>
+                  <Button size="sm" variant="secondary" onClick={() => navigate(`/project/${currentProjectId}/outline`)}>
+                    继续编辑
+                  </Button>
+                </div>
+              </div>
+            ) : (
+              <div className="rounded-md border border-dashed border-gray-300 bg-gray-50 p-4 text-sm text-gray-500">
+                暂无最近项目。使用左侧创建区开始第一份汇报。
+              </div>
+            )}
+          </div>
+        </aside>
+      </section>
+
+      <section className="grid gap-6 xl:grid-cols-2">
+        <div className="rounded-lg border border-gray-200 bg-white p-5 shadow-sm">
+          <div className="mb-4 flex items-center justify-between">
+            <h2 className="text-base font-semibold text-gray-900">导出任务状态</h2>
+            <button type="button" onClick={() => navigate('/exports')} className="text-sm font-medium text-amber-700 hover:text-amber-800">
+              任务中心
+            </button>
+          </div>
+          <div className="grid gap-3 sm:grid-cols-3">
+            {[
+              { label: '进行中', value: '0', icon: Clock, tone: 'text-blue-700 bg-blue-50' },
+              { label: '可下载', value: '0', icon: Download, tone: 'text-green-700 bg-green-50' },
+              { label: '失败待处理', value: '0', icon: AlertCircle, tone: 'text-red-700 bg-red-50' },
+            ].map((item) => {
+              const Icon = item.icon;
+              return (
+                <div key={item.label} className="rounded-md border border-gray-200 p-3">
+                  <div className={`mb-2 inline-flex rounded-md p-2 ${item.tone}`}>
+                    <Icon size={16} />
+                  </div>
+                  <p className="text-lg font-semibold text-gray-900">{item.value}</p>
+                  <p className="text-xs text-gray-500">{item.label}</p>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+
+        <div className="rounded-lg border border-gray-200 bg-white p-5 shadow-sm">
+          <h2 className="text-base font-semibold text-gray-900">系统状态</h2>
+          <div className="mt-4 space-y-3">
+            {[
+              { label: 'OpenAI/ChatGPT 主线', value: '默认推荐', icon: CheckCircle2 },
+              { label: '图片生成/编辑', value: 'gpt-image-2', icon: ImagePlus },
+              { label: '文件解析', value: hasParsingFiles ? '解析中' : '就绪', icon: FileText },
+              { label: user?.is_admin ? '管理员统计' : '个人工作区', value: user?.is_admin ? '可查看用户与项目治理' : '仅显示个人项目', icon: Users },
+            ].map((item) => {
+              const Icon = item.icon;
+              return (
+                <div key={item.label} className="flex items-center justify-between rounded-md border border-gray-100 bg-gray-50 px-3 py-2">
+                  <div className="flex items-center gap-2 text-sm text-gray-700">
+                    <Icon size={16} className="text-amber-600" />
+                    {item.label}
+                  </div>
+                  <span className="text-xs font-medium text-gray-500">{item.value}</span>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      </section>
+
       <ToastContainer toasts={homeToasts} onRemove={homeRemove} />
-      {/* 素材生成模态 - 在主页始终生成全局素材 */}
-      <MaterialGeneratorModal
-        projectId={null}
-        isOpen={isMaterialModalOpen}
-        onClose={() => setIsMaterialModalOpen(false)}
-      />
-      {/* 素材中心模态 */}
-      <MaterialCenterModal
-        isOpen={isMaterialCenterOpen}
-        onClose={() => setIsMaterialCenterOpen(false)}
-      />
-      {/* 从素材库选择插入到文本框 */}
-      <MaterialSelector
-        isOpen={isMaterialSelectorOpen}
-        onClose={() => setIsMaterialSelectorOpen(false)}
-        onSelect={handleMaterialSelect}
-        multiple
-      />
-      {/* 参考文件选择器 */}
-      {/* 在 Home 页面，始终查询全局文件，因为此时还没有项目 */}
+      <MaterialGeneratorModal projectId={null} isOpen={isMaterialModalOpen} onClose={() => setIsMaterialModalOpen(false)} />
+      <MaterialCenterModal isOpen={isMaterialCenterOpen} onClose={() => setIsMaterialCenterOpen(false)} />
+      <MaterialSelector isOpen={isMaterialSelectorOpen} onClose={() => setIsMaterialSelectorOpen(false)} onSelect={handleMaterialSelect} multiple />
       <ReferenceFileSelector
         projectId={null}
         isOpen={isFileSelectorOpen}
         onClose={() => setIsFileSelectorOpen(false)}
         onSelect={handleFilesSelected}
-        multiple={true}
+        multiple
         initialSelectedIds={selectedFileIds}
       />
-      
       <FilePreviewModal fileId={previewFileId} onClose={() => setPreviewFileId(null)} />
-      {/* 帮助模态框 */}
-      <HelpModal
-        isOpen={isHelpModalOpen}
-        onClose={() => setIsHelpModalOpen(false)}
-      />
-      {/* Footer */}
-      <Footer />
+      <HelpModal isOpen={isHelpModalOpen} onClose={() => setIsHelpModalOpen(false)} />
     </div>
   );
 };

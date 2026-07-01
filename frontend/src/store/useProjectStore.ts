@@ -712,7 +712,7 @@ const debouncedUpdatePage = debounce(
     // 检查描述生成模式，优先从 sessionStorage 缓存读取以避免额外 API 调用
     let mode: string = 'streaming';
     try {
-      const cached = sessionStorage.getItem('banana-settings');
+      const cached = sessionStorage.getItem('pv-smartdeck-settings');
       if (cached) {
         const parsed = JSON.parse(cached);
         if (parsed?.description_generation_mode) {

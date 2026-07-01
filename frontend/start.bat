@@ -1,6 +1,6 @@
 @echo off
 echo ====================================
-echo 蕉幻 (Banana Slides) 前端启动脚本
+echo 光伏智呈 (PV SmartDeck) 前端启动脚本
 echo ====================================
 echo.
 

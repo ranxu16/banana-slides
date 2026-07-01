@@ -4,6 +4,7 @@ import { useT } from '@/hooks/useT';
 import { StatusBadge, Skeleton, useConfirm } from '@/components/shared';
 import { getImageUrl } from '@/api/client';
 import type { Page } from '@/types';
+import { BrandLogo } from '@/components/layout';
 
 // SlideCard 组件自包含翻译
 const slideCardI18n = {
@@ -103,7 +104,7 @@ export const SlideCard: React.FC<SlideCardProps> = ({
         ) : (
           <div className="w-full h-full flex items-center justify-center text-gray-400">
             <div className="text-center">
-              <div className="text-3xl mb-1">🍌</div>
+              <BrandLogo compact iconClassName="h-8 w-8 opacity-40" className="mb-2 justify-center" />
               <div className="text-xs">{t('slideCard.notGenerated')}</div>
             </div>
           </div>
@@ -137,4 +138,3 @@ export const SlideCard: React.FC<SlideCardProps> = ({
     </div>
   );
 };
-

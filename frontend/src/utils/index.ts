@@ -178,7 +178,7 @@ export function normalizeErrorMessage(errorMessage: string | null | undefined): 
     return isZh ? '访问被拒绝，请检查 API 权限配置。' : 'Access denied. Please check API permissions.';
   } else if (message.includes('aspect_ratio') || message.includes('aspect ratio')) {
     return isZh
-      ? '当前画面比例不被该模型支持，请在项目设置中尝试其他画面比例后重试。'
+      ? '当前画面比例不被该模型支持，请在项目覆盖项中尝试其他画面比例后重试。'
       : 'The selected aspect ratio is not supported by this model. Please try a different ratio in project settings.';
   } else if (message.includes('network error') || message.includes('econnrefused')) {
     return isZh ? '网络连接失败，请检查网络或后端服务是否正常运行。' : 'Network error. Please check your connection.';
@@ -207,7 +207,7 @@ export function normalizeErrorMessage(errorMessage: string | null | undefined): 
         : 'Editable PPTX export failed: the current style extraction model does not support image input. Switch to a vision-capable image caption model and try again.';
     }
     return isZh
-      ? '可编辑 PPTX 导出失败：文本样式提取没有成功完成。请检查 image caption 模型/API 配置，或在项目设置中开启“允许返回半成品”后重试。'
+      ? '可编辑 PPTX 导出失败：文本样式提取没有成功完成。请检查 image caption 模型/API 配置，或在项目覆盖项中开启“允许返回半成品”后重试。'
       : 'Editable PPTX export failed because text style extraction did not complete. Check the image caption model/API settings, or enable partial results and try again.';
   }
 

@@ -3,11 +3,11 @@
 @tailwind utilities;
 
 :root {
-  /* 主色 - 黄色系 */
-  --banana-yellow: #FFD700;
-  --banana-yellow-light: #FFE44D;
-  --banana-yellow-dark: #FFC700;
-  --banana-yellow-pale: #FFF9E6;
+  /* 主色 - 光伏智呈品牌橙 */
+  --banana-yellow: #F59E0B;
+  --banana-yellow-light: #FBBF24;
+  --banana-yellow-dark: #D97706;
+  --banana-yellow-pale: #FFF7E6;
 
   /* 中性色 - 黑白灰 */
   --black: #1A1A1A;
@@ -17,10 +17,10 @@
   --white: #FFFFFF;
 
   /* 功能色 */
-  --success: #52C41A;
-  --warning: #FAAD14;
-  --error: #FF4D4F;
-  --info: #1890FF;
+  --success: #16A34A;
+  --warning: #F59E0B;
+  --error: #DC2626;
+  --info: #2563EB;
 
   /* 过渡 */
   --transition-fast: 150ms ease-in-out;
@@ -28,21 +28,21 @@
   --transition-slow: 350ms ease-in-out;
 
   /* 背景色 */
-  --bg-primary: #FFFFFF;
-  --bg-secondary: #F5F5F5;
-  --bg-tertiary: #FAFAFA;
+  --bg-primary: #F7F8FA;
+  --bg-secondary: #F2F4F7;
+  --bg-tertiary: #FAFBFC;
   --bg-elevated: #FFFFFF;
-  --bg-hover: #F5F5F5;
+  --bg-hover: #F9FAFB;
 
   /* 文字色 */
-  --text-primary: #1A1A1A;
-  --text-secondary: #4A4A4A;
-  --text-tertiary: #757575;
+  --text-primary: #111827;
+  --text-secondary: #4B5563;
+  --text-tertiary: #9CA3AF;
 
   /* 边框色 */
-  --border-primary: #E5E5E5;
-  --border-secondary: #F0F0F0;
-  --border-hover: #D4D4D4;
+  --border-primary: #E5E7EB;
+  --border-secondary: #F3F4F6;
+  --border-hover: #D1D5DB;
 }
 
 .dark {
@@ -93,6 +93,13 @@ body {
   background-color: var(--bg-primary);
   color: var(--text-primary);
   transition: background-color 0.2s ease-in-out, color 0.2s ease-in-out;
+}
+
+button,
+input,
+textarea,
+select {
+  font: inherit;
 }
 
 #root {
@@ -169,4 +176,3 @@ body {
 .markdown-content {
   line-height: 1.6;
 }
-

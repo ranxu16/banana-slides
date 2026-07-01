@@ -63,7 +63,7 @@ export function Login() {
         boxShadow: '0 4px 24px rgba(0,0,0,0.10)',
       }}>
         <h1 style={{ fontSize: 22, fontWeight: 700, marginBottom: 24, textAlign: 'center', color: '#111827' }}>
-          🍌 Banana Slides
+          光伏智呈 PV SmartDeck
         </h1>
 
         {/* Tab */}

@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="光伏智呈">
+  <rect width="64" height="64" rx="14" fill="#fff7e6"/>
+  <path d="M12 36h40" stroke="#f59e0b" stroke-width="3" stroke-linecap="round"/>
+  <path d="M18 24c7-8 21-8 28 0" fill="none" stroke="#f59e0b" stroke-width="3" stroke-linecap="round"/>
+  <rect x="15" y="27" width="34" height="24" rx="4" fill="#ffffff" stroke="#d97706" stroke-width="2"/>
+  <path d="M15 35h34M15 43h34M24 27v24M34 27v24M44 27v24" stroke="#fbbf24" stroke-width="1.5"/>
+  <path d="M24 18h16" stroke="#111827" stroke-width="3" stroke-linecap="round"/>
+  <path d="M26 15h12" stroke="#111827" stroke-width="3" stroke-linecap="round"/>
+</svg>
