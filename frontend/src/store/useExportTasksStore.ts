@@ -38,6 +38,8 @@ export interface ExportTask {
       other_warnings?: string[];
       total_warnings?: number;
     };
+    download_url?: string;
+    filename?: string;
   };
   downloadUrl?: string;
   filename?: string;
@@ -45,6 +47,8 @@ export interface ExportTask {
   createdAt: string;
   completedAt?: string;
 }
+
+const pollTimeouts = new Map<string, ReturnType<typeof setTimeout>>();
 
 interface ExportTasksState {
   tasks: ExportTask[];
@@ -55,6 +59,8 @@ interface ExportTasksState {
   removeTask: (id: string) => void;
   clearCompleted: () => void;
   pollTask: (id: string, projectId: string, taskId: string) => Promise<void>;
+  stopTaskPolling: (id: string) => void;
+  stopAllPolling: () => void;
   restoreActiveTasks: () => void; // 恢复正在进行的任务并重新开始轮询
 }
 
@@ -116,6 +122,12 @@ export const useExportTasksStore = create<ExportTasksState>()(
       },
 
       pollTask: async (id, projectId, taskId) => {
+        const existingTimeout = pollTimeouts.get(id);
+        if (existingTimeout) {
+          clearTimeout(existingTimeout);
+          pollTimeouts.delete(id);
+        }
+
         const poll = async () => {
           try {
             const response = await api.getTaskStatus(projectId, taskId);
@@ -153,9 +165,11 @@ export const useExportTasksStore = create<ExportTasksState>()(
             }
 
             if (task.status === 'COMPLETED') {
+              pollTimeouts.delete(id);
               updates.completedAt = new Date().toISOString();
               get().updateTask(id, updates);
             } else if (task.status === 'FAILED') {
+              pollTimeouts.delete(id);
               const taskErrorMessage = task.error_message
                 || (typeof task.error === 'string' ? task.error : task.error?.message)
                 || t('exportStore.exportFailed');
@@ -164,11 +178,12 @@ export const useExportTasksStore = create<ExportTasksState>()(
               get().updateTask(id, updates);
             } else if (task.status === 'PENDING' || task.status === 'RUNNING' || task.status === 'PROCESSING') {
               get().updateTask(id, updates);
-              // Continue polling
-              setTimeout(poll, 2000);
+              const timeout = setTimeout(poll, 2000);
+              pollTimeouts.set(id, timeout);
             }
           } catch (error: any) {
             console.error('[ExportTasksStore] Poll error:', error);
+            pollTimeouts.delete(id);
             get().updateTask(id, {
               status: 'FAILED',
               errorMessage: normalizeErrorMessage(error.message || t('exportStore.pollFailed')),
@@ -178,6 +193,19 @@ export const useExportTasksStore = create<ExportTasksState>()(
         };
 
         await poll();
+      },
+
+      stopTaskPolling: (id) => {
+        const timeout = pollTimeouts.get(id);
+        if (timeout) {
+          clearTimeout(timeout);
+          pollTimeouts.delete(id);
+        }
+      },
+
+      stopAllPolling: () => {
+        pollTimeouts.forEach((timeout) => clearTimeout(timeout));
+        pollTimeouts.clear();
       },
 
       restoreActiveTasks: () => {

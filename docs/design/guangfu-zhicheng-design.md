@@ -846,3 +846,21 @@ ui-guangfu-dashboard-redesign
 - 遗留：搜索和状态筛选当前先作用于当前页数据，后续需要后端搜索/筛选接口支持全量项目；管理员“全部项目 / 未归属历史项目”目前是可见控件和信息架构占位，尚未接入管理员全局项目接口；项目最近导出字段暂显示“暂无导出”，后续需接导出任务数据。
 - 提交：`Refactor projects page dashboard`（最终 hash 以 `git log` 为准，避免提交自引用 hash 在 amend 时反复变化）。
 - 下一步：进入导出任务中心或模板/素材中心的一级页面建设。
+
+### 2026-07-01 09:25 - 导出任务中心页面启动
+
+- 范围：`docs/design/mockups/export-tasks.md`、`frontend/src/store/useExportTasksStore.ts`、`frontend/src/components/shared/ExportTasksPanel.tsx`、`frontend/src/App.tsx`。
+- 动作：进入导出任务中心一级页面建设前，读取设计稿约束、导出任务 store、预览页已有任务面板和路由占位；确认本步骤只处理 `/exports` 前端页面，不混入后端可编辑 PPTX 流水线改动。
+- 结果：确认现有 `useExportTasksStore` 已持久化导出任务、保存真实 `errorMessage`、支持恢复活跃任务与清理完成/失败任务；现有 `ExportTasksPanel` 更适合项目预览页侧栏，不适合作为全局任务中心整页直接复用。
+- 验证：通过 `sed` 阅读设计稿、store、面板与路由；`git status --short` 确认当前分支为 `ui-guangfu-dashboard-redesign`，后端未提交改动仍保持未暂存。
+- 遗留：store 的轮询目前由 `setTimeout` 链式触发，缺少页面卸载时取消句柄；本步骤先避免新增额外轮询循环，后续需要把轮询生命周期下沉为可停止的任务管理器。
+- 下一步：新增 `frontend/src/pages/ExportTasks.tsx`，将 `/exports` 从占位页改为真实任务中心，展示搜索、状态/格式筛选、进度、真实失败原因、下载、重试占位、查看项目和清理历史。
+
+### 2026-07-01 09:45 - 导出任务中心一级页面完成
+
+- 范围：`frontend/src/pages/ExportTasks.tsx`、`frontend/src/store/useExportTasksStore.ts`、`frontend/src/App.tsx`、`docs/design/guangfu-zhicheng-design.md`。
+- 动作：新增导出任务中心整页组件；将 `/exports` 路由从占位页切换为真实页面；复用全局导出任务 store 展示任务统计、搜索、状态筛选、格式筛选、进度、警告、下载、查看项目、移除、清理历史；失败任务直接展示 `task.errorMessage`、最新进度消息和 `progress.help_text`，不再只给泛化提示；为 store 增加 `download_url/filename` 进度类型字段，并引入可停止的轮询 timeout 管理。
+- 结果：用户可以从一级导航进入导出任务中心；可编辑 PPTX、GPT 视觉结构分析、gpt-image-2 图层生成等失败原因会在任务行内直接可读；页面挂载时恢复活跃任务轮询，离开页面时停止当前 store 中登记的轮询 timeout；预览页原 `ExportTasksPanel` 仍保留。
+- 验证：`npm run guard:brand` 通过；`npm run test:run -- src/tests/branding-workbench-regression.test.ts` 通过，2 tests passed；`npm run build` 通过；`git diff --check -- frontend/src/pages/ExportTasks.tsx frontend/src/store/useExportTasksStore.ts frontend/src/App.tsx docs/design/guangfu-zhicheng-design.md` 通过。
+- 遗留：失败任务的“重新检查”当前只重新拉取原 task 状态，不会重新发起一次导出；真正“重试导出”需要后端提供按历史任务参数重新导出的接口，或前端保存原导出参数并回到项目预览页重新导出；页面暂未展示服务端历史导出文件列表，当前只展示本地持久化的任务记录。
+- 下一步：阶段性提交本次导出任务中心前端改造；随后继续模板中心/素材中心或进入全局配置中心整页重构。

@@ -8,6 +8,7 @@ import { DetailEditor } from './pages/DetailEditor';
 import { SlidePreview } from './pages/SlidePreview';
 import { SettingsPage } from './pages/Settings';
 import { Admin } from './pages/Admin';
+import { ExportTasks } from './pages/ExportTasks';
 import { useProjectStore } from './store/useProjectStore';
 import { useToast, ToastContainer, AuthGuard } from './components/shared';
 import { AppShell } from './components/layout';
@@ -105,11 +106,7 @@ function App() {
             path="/exports"
             element={
               <AppShell title="导出任务" description="查看、下载和排查 PPTX/PDF/可编辑 PPTX 导出任务">
-                <PlaceholderPage
-                  title="导出任务中心将在后续阶段接入"
-                  description="这里会承接全局任务列表、失败原因、下载、重试和清理历史。当前先开放入口，后续替代仅在预览页出现的任务面板。"
-                  items={['进行中任务', '失败原因与重试', '成功文件下载', '任务轮询受控停止']}
-                />
+                <ExportTasks />
               </AppShell>
             }
           />
