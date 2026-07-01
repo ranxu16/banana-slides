@@ -827,3 +827,22 @@ ui-guangfu-dashboard-redesign
 - 验证：`git status --short` 显示前端、设计文档和后端均有改动；本步骤只计划暂存 `frontend/` 和 `docs/design/`。
 - 遗留：提交后需要记录 commit hash；随后继续“我的项目”页面重构。
 - 下一步：执行 `git add frontend docs/design`，检查暂存文件列表后提交。
+
+### 2026-07-01 08:50 - 前端工作台 checkpoint 已提交
+
+- 范围：`frontend/` 和 `docs/design/`。
+- 动作：提交前端品牌守卫、AppShell、工作台首页首轮 Dashboard、关键界面设计稿说明和准备清单。
+- 结果：生成阶段性提交 `8d097fa Refactor PV SmartDeck frontend shell and dashboard`，共 42 个文件，包含设计文档、mockups、PV SmartDeck 图标、AppShell、BrandLogo、首页重构、品牌回归测试和前端守卫脚本。
+- 验证：提交前已通过 `npm run guard:brand`、`npm run test:run -- src/tests/branding-workbench-regression.test.ts`、`npm run build` 和相关 `git diff --check`。
+- 遗留：后端可编辑 PPTX 流水线相关改动仍未提交；本次提交使用本机自动 Git 身份 `许冉 <xuran@xurandeMacBook-Air.local>`；工作台视觉截图验收仍待补。
+- 下一步：继续按 `docs/design/mockups/projects-page.md` 重构“我的项目”页面。
+
+### 2026-07-01 09:00 - 我的项目页面首轮重构
+
+- 范围：`frontend/src/pages/History.tsx`。
+- 动作：按 `docs/design/mockups/projects-page.md` 将旧“历史项目”页面改为 AppShell 内的“我的项目”管理页；移除页面自带顶部导航、香蕉图标、主题切换和渐变背景；新增 PageHeader、搜索框、状态筛选、管理员范围切换控件、统计卡、桌面表格、移动端项目卡片、批量选择、继续编辑、删除和分页区域。
+- 结果：页面主心智从“历史记录”转为“我的项目”；普通项目管理入口更接近设计稿要求；表格白底深色文字可读；保留原加载项目、分页、删除、批量删除、重命名、打开项目、同步项目和跳转逻辑。
+- 验证：`npm run guard:brand` 通过；`npm run test:run -- src/tests/branding-workbench-regression.test.ts` 通过，2 tests passed；`npm run build` 通过；`git diff --check -- frontend/src/pages/History.tsx docs/design/guangfu-zhicheng-design.md` 通过；`rg` 扫描 `History.tsx` 未发现旧品牌词、香蕉图标、渐变页面背景、`useTheme` 或 `ProjectCard` 旧渲染依赖。
+- 遗留：搜索和状态筛选当前先作用于当前页数据，后续需要后端搜索/筛选接口支持全量项目；管理员“全部项目 / 未归属历史项目”目前是可见控件和信息架构占位，尚未接入管理员全局项目接口；项目最近导出字段暂显示“暂无导出”，后续需接导出任务数据。
+- 提交：`Refactor projects page dashboard`（最终 hash 以 `git log` 为准，避免提交自引用 hash 在 amend 时反复变化）。
+- 下一步：进入导出任务中心或模板/素材中心的一级页面建设。

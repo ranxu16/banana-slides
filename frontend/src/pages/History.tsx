@@ -1,15 +1,13 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useTranslation } from 'react-i18next';
-import { Home, Trash2, Sun, Moon } from 'lucide-react';
-import { Button, Loading, Card, Pagination, useToast, ToastContainer, useConfirm } from '@/components/shared';
-import { ProjectCard } from '@/components/history/ProjectCard';
+import { AlertCircle, CheckCircle2, Clock, FileText, FolderOpen, ImageIcon, Plus, Search, Trash2 } from 'lucide-react';
+import { Button, Loading, Pagination, useToast, ToastContainer, useConfirm } from '@/components/shared';
 import { useProjectStore } from '@/store/useProjectStore';
-import { useTheme } from '@/hooks/useTheme';
+import { useAuthStore } from '@/store/useAuthStore';
 import { useT } from '@/hooks/useT';
 import * as api from '@/api/endpoints';
 import { normalizeProject } from '@/utils';
-import { getProjectTitle, getProjectRoute } from '@/utils/projectUtils';
+import { formatDate, getProjectRoute, getProjectTitle, getStatusColor, getStatusText } from '@/utils/projectUtils';
 import type { Project } from '@/types';
 
 // 页面特有翻译 - AI 可以直接看到所有文案
@@ -19,9 +17,9 @@ const historyI18n = {
     nav: { home: '主页' },
     settings: { language: { label: '界面语言' }, theme: { light: '浅色', dark: '深色' } },
     history: {
-      title: '历史项目',
-      subtitle: '查看和管理你的所有项目',
-      noProjects: '暂无历史项目',
+      title: '我的项目',
+      subtitle: '管理汇报项目、生成状态和导出结果',
+      noProjects: '暂无项目',
       createFirst: '创建你的第一个项目开始使用吧',
       selectedCount: '已选择 {{count}} 项',
       cancelSelect: '取消选择',
@@ -37,6 +35,23 @@ const historyI18n = {
       openFailed: '打开项目失败',
       loadFailed: '加载历史项目失败',
       perPage: '条/页',
+      searchPlaceholder: '搜索项目名称、提示词或内容',
+      allStatuses: '全部状态',
+      currentPageFilterHint: '搜索与筛选当前阶段先作用于当前页结果',
+      myProjects: '我的项目',
+      allProjects: '全部项目',
+      unownedProjects: '未归属历史项目',
+      continueEdit: '继续编辑',
+      preview: '预览',
+      export: '导出',
+      updatedAt: '最近更新',
+      pages: '页数',
+      source: '创建方式',
+      recentExport: '最近导出',
+      actions: '操作',
+      projectName: '项目名称',
+      noExport: '暂无导出',
+      failedReason: '查看失败原因',
       titleEmpty: '项目名称不能为空',
       titleUpdated: '项目名称已更新',
       titleUpdateFailed: '更新项目名称失败',
@@ -47,8 +62,8 @@ const historyI18n = {
     nav: { home: 'Home' },
     settings: { language: { label: 'Interface Language' }, theme: { light: 'Light', dark: 'Dark' } },
     history: {
-      title: 'Project History',
-      subtitle: 'View and manage all your projects',
+      title: 'My Projects',
+      subtitle: 'Manage report projects, generation status, and exports',
       noProjects: 'No projects yet',
       createFirst: 'Create your first project to get started',
       selectedCount: '{{count}} selected',
@@ -65,6 +80,23 @@ const historyI18n = {
       openFailed: 'Failed to open project',
       loadFailed: 'Failed to load project history',
       perPage: '/ page',
+      searchPlaceholder: 'Search project title, prompt, or content',
+      allStatuses: 'All statuses',
+      currentPageFilterHint: 'Search and filters currently apply to this page',
+      myProjects: 'My Projects',
+      allProjects: 'All Projects',
+      unownedProjects: 'Unowned History',
+      continueEdit: 'Continue',
+      preview: 'Preview',
+      export: 'Export',
+      updatedAt: 'Updated',
+      pages: 'Pages',
+      source: 'Source',
+      recentExport: 'Recent Export',
+      actions: 'Actions',
+      projectName: 'Project',
+      noExport: 'No export',
+      failedReason: 'View failure reason',
       titleEmpty: 'Project name cannot be empty',
       titleUpdated: 'Project name updated',
       titleUpdateFailed: 'Failed to update project name',
@@ -77,9 +109,8 @@ const PAGE_SIZE_KEY = 'history_page_size';
 
 export const History: React.FC = () => {
   const navigate = useNavigate();
-  const { i18n } = useTranslation();
   const t = useT(historyI18n); // 组件内翻译 + 自动 fallback 到全局
-  const { isDark, setTheme } = useTheme();
+  const { user } = useAuthStore();
   const { syncProject, setCurrentProject } = useProjectStore();
 
   const [projects, setProjects] = useState<Project[]>([]);
@@ -95,10 +126,44 @@ export const History: React.FC = () => {
   const [isDeleting, setIsDeleting] = useState(false);
   const [editingProjectId, setEditingProjectId] = useState<string | null>(null);
   const [editingTitle, setEditingTitle] = useState<string>('');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [statusFilter, setStatusFilter] = useState('all');
+  const [scopeFilter, setScopeFilter] = useState('mine');
   const { show, toasts, remove } = useToast();
   const { confirm, ConfirmDialog } = useConfirm();
 
   const totalPages = Math.ceil(totalProjects / pageSize);
+  const statusOptions = [
+    { value: 'all', label: t('history.allStatuses') },
+    { value: '已完成', label: '已完成' },
+    { value: '待生成图片', label: '待生成图片' },
+    { value: '待生成描述', label: '待生成描述' },
+    { value: '未开始', label: '未开始' },
+  ];
+  const filteredProjects = projects.filter((project) => {
+    const title = getProjectTitle(project).toLowerCase();
+    const haystack = [
+      title,
+      project.idea_prompt,
+      project.outline_text,
+      project.description_text,
+      project.project_title,
+    ].filter(Boolean).join(' ').toLowerCase();
+    const matchesSearch = !searchQuery.trim() || haystack.includes(searchQuery.trim().toLowerCase());
+    const statusText = getStatusText(project);
+    const matchesStatus = statusFilter === 'all' || statusText === statusFilter;
+    return matchesSearch && matchesStatus;
+  });
+  const completedCount = projects.filter((project) => getStatusText(project) === '已完成').length;
+  const inProgressCount = projects.filter((project) => getStatusText(project) !== '已完成' && getStatusText(project) !== '未开始').length;
+  const draftCount = projects.filter((project) => getStatusText(project) === '未开始').length;
+
+  const getProjectSource = (project: Project) => {
+    if (project.description_text) return '从描述生成';
+    if (project.outline_text) return '从大纲生成';
+    if (project.idea_prompt) return '一句话生成';
+    return '项目创建';
+  };
 
   const loadProjects = useCallback(async (page: number) => {
     setIsLoading(true);
@@ -371,163 +436,265 @@ export const History: React.FC = () => {
   }, [handleSaveEdit, handleCancelEdit]);
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-banana-50 dark:from-background-primary via-white dark:via-background-primary to-gray-50 dark:to-background-primary">
-      {/* 导航栏 */}
-      <nav className="h-14 md:h-16 bg-white dark:bg-background-secondary shadow-sm dark:shadow-background-primary/30 border-b border-gray-100 dark:border-border-primary">
-        <div className="max-w-7xl mx-auto px-3 md:px-4 h-full flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <div className="w-8 h-8 md:w-10 md:h-10 bg-gradient-to-br from-banana-500 to-banana-600 rounded-lg flex items-center justify-center text-xl md:text-2xl">
-              🍌
-            </div>
-            <span className="text-lg md:text-xl font-bold text-gray-900 dark:text-foreground-primary">{t('home.title')}</span>
-          </div>
-          <div className="flex items-center gap-2 md:gap-4">
-            <Button
-              variant="ghost"
-              size="sm"
-              icon={<Home size={16} className="md:w-[18px] md:h-[18px]" />}
-              onClick={() => navigate('/')}
-              className="text-xs md:text-sm"
-            >
-              {t('nav.home')}
-            </Button>
-            {/* 分隔线 */}
-            <div className="h-5 w-px bg-gray-300 dark:bg-border-primary" />
-            {/* 语言切换按钮 */}
-            <button
-              onClick={() => i18n.changeLanguage(i18n.language?.startsWith('zh') ? 'en' : 'zh')}
-              className="px-2 py-1 text-xs font-medium text-gray-600 dark:text-foreground-tertiary hover:text-gray-900 dark:hover:text-gray-100 hover:bg-banana-100/60 dark:hover:bg-background-hover rounded-md transition-all"
-              title={t('settings.language.label')}
-            >
-              {i18n.language?.startsWith('zh') ? 'EN' : '中'}
-            </button>
-            {/* 主题切换按钮 */}
-            <button
-              onClick={() => setTheme(isDark ? 'light' : 'dark')}
-              className="p-1.5 text-gray-600 dark:text-foreground-tertiary hover:text-gray-900 dark:hover:text-gray-100 hover:bg-banana-100/60 dark:hover:bg-background-hover rounded-md transition-all"
-              title={isDark ? t('settings.theme.light') : t('settings.theme.dark')}
-            >
-              {isDark ? <Sun size={16} /> : <Moon size={16} />}
-            </button>
-          </div>
+    <div className="space-y-6">
+      <section className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+        <div>
+          <h1 className="text-[22px] font-semibold leading-tight text-gray-900">{t('history.title')}</h1>
+          <p className="mt-1 text-sm text-gray-500">{t('history.subtitle')}</p>
+          <p className="mt-2 text-xs text-gray-400">{t('history.currentPageFilterHint')}</p>
         </div>
-      </nav>
-
-      {/* 主内容 */}
-      <main className="max-w-6xl mx-auto px-3 md:px-4 py-6 md:py-8">
-        <div className="mb-6 md:mb-8 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-          <div>
-            <h1 className="text-2xl md:text-3xl font-bold text-gray-900 dark:text-foreground-primary mb-1 md:mb-2">{t('history.title')}</h1>
-            <p className="text-sm md:text-base text-gray-600 dark:text-foreground-tertiary">{t('history.subtitle')}</p>
-          </div>
-          {projects.length > 0 && selectedProjects.size > 0 && (
-            <div className="flex items-center gap-3">
-              <span className="text-sm text-gray-600 dark:text-foreground-tertiary">
+        <div className="flex flex-wrap items-center gap-2">
+          {selectedProjects.size > 0 && (
+            <>
+              <span className="rounded-md bg-amber-50 px-2.5 py-1 text-xs font-medium text-amber-700">
                 {t('history.selectedCount', { count: selectedProjects.size })}
               </span>
-              <Button
-                variant="secondary"
-                size="sm"
-                onClick={() => setSelectedProjects(new Set())}
-                disabled={isDeleting}
-              >
+              <Button variant="secondary" size="sm" onClick={() => setSelectedProjects(new Set())} disabled={isDeleting}>
                 {t('history.cancelSelect')}
               </Button>
-              <Button
-                variant="secondary"
-                size="sm"
-                icon={<Trash2 size={16} />}
-                onClick={handleBatchDelete}
-                disabled={isDeleting}
-                loading={isDeleting}
-              >
+              <Button variant="secondary" size="sm" icon={<Trash2 size={16} />} onClick={handleBatchDelete} disabled={isDeleting} loading={isDeleting}>
                 {t('history.batchDelete')}
               </Button>
+            </>
+          )}
+          <Button size="sm" icon={<Plus size={16} />} onClick={() => navigate('/')}>
+            {t('home.actions.createProject')}
+          </Button>
+        </div>
+      </section>
+
+      <section className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+        {[
+          { label: '项目总数', value: String(totalProjects), icon: FolderOpen, tone: 'text-gray-700 bg-gray-50' },
+          { label: '当前页完成', value: String(completedCount), icon: CheckCircle2, tone: 'text-green-700 bg-green-50' },
+          { label: '当前页处理中', value: String(inProgressCount), icon: Clock, tone: 'text-blue-700 bg-blue-50' },
+          { label: '当前页草稿', value: String(draftCount), icon: FileText, tone: 'text-amber-700 bg-amber-50' },
+        ].map((stat) => {
+          const Icon = stat.icon;
+          return (
+            <div key={stat.label} className="rounded-lg border border-gray-200 bg-white p-4 shadow-sm">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <p className="text-xs font-medium text-gray-500">{stat.label}</p>
+                  <p className="mt-1 text-xl font-semibold text-gray-900">{stat.value}</p>
+                </div>
+                <div className={`rounded-md p-2 ${stat.tone}`}>
+                  <Icon size={18} />
+                </div>
+              </div>
+            </div>
+          );
+        })}
+      </section>
+
+      <section className="rounded-lg border border-gray-200 bg-white p-4 shadow-sm">
+        <div className="grid gap-3 lg:grid-cols-[minmax(220px,1fr)_180px_auto] lg:items-center">
+          <label className="relative block">
+            <Search size={16} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+            <input
+              value={searchQuery}
+              onChange={(event) => setSearchQuery(event.target.value)}
+              placeholder={t('history.searchPlaceholder')}
+              className="h-10 w-full rounded-md border border-gray-200 bg-gray-50 pl-9 pr-3 text-sm text-gray-900 outline-none transition-colors focus:border-amber-400 focus:bg-white"
+            />
+          </label>
+          <select
+            value={statusFilter}
+            onChange={(event) => setStatusFilter(event.target.value)}
+            className="h-10 rounded-md border border-gray-200 bg-white px-3 text-sm text-gray-700 outline-none focus:border-amber-400"
+          >
+            {statusOptions.map((option) => (
+              <option key={option.value} value={option.value}>{option.label}</option>
+            ))}
+          </select>
+          {user?.is_admin && (
+            <div className="flex rounded-md border border-gray-200 bg-gray-50 p-1">
+              {[
+                { value: 'mine', label: t('history.myProjects') },
+                { value: 'all', label: t('history.allProjects') },
+                { value: 'unowned', label: t('history.unownedProjects') },
+              ].map((scope) => (
+                <button
+                  key={scope.value}
+                  type="button"
+                  onClick={() => setScopeFilter(scope.value)}
+                  className={`rounded px-3 py-1.5 text-xs font-medium transition-colors ${
+                    scopeFilter === scope.value ? 'bg-white text-amber-700 shadow-sm' : 'text-gray-500 hover:text-gray-800'
+                  }`}
+                >
+                  {scope.label}
+                </button>
+              ))}
             </div>
           )}
         </div>
+      </section>
 
-        {isLoading ? (
-          <div className="flex items-center justify-center py-12">
-            <Loading message={t('common.loading')} />
+      {isLoading ? (
+        <div className="rounded-lg border border-gray-200 bg-white py-16 shadow-sm">
+          <Loading message={t('common.loading')} />
+        </div>
+      ) : error ? (
+        <div className="rounded-lg border border-red-100 bg-white p-8 text-center shadow-sm">
+          <AlertCircle size={36} className="mx-auto mb-3 text-red-500" />
+          <p className="mb-4 text-sm text-gray-600">{error}</p>
+          <Button onClick={() => loadProjects(currentPage)}>{t('common.retry')}</Button>
+        </div>
+      ) : projects.length === 0 ? (
+        <div className="rounded-lg border border-dashed border-gray-300 bg-white p-12 text-center shadow-sm">
+          <FolderOpen size={42} className="mx-auto mb-4 text-gray-400" />
+          <h3 className="text-lg font-semibold text-gray-900">{t('history.noProjects')}</h3>
+          <p className="mt-2 text-sm text-gray-500">{t('history.createFirst')}</p>
+          <div className="mt-6 flex justify-center">
+            <Button icon={<Plus size={16} />} onClick={() => navigate('/')}>{t('home.actions.createProject')}</Button>
           </div>
-        ) : error ? (
-          <Card className="p-8 text-center">
-            <div className="text-6xl mb-4">⚠️</div>
-            <p className="text-gray-600 dark:text-foreground-tertiary mb-4">{error}</p>
-            <Button variant="primary" onClick={() => loadProjects(currentPage)}>
-              {t('common.retry')}
-            </Button>
-          </Card>
-        ) : projects.length === 0 ? (
-          <Card className="p-12 text-center">
-            <div className="text-6xl mb-4">📭</div>
-            <h3 className="text-xl font-semibold text-gray-700 dark:text-foreground-secondary mb-2">
-              {t('history.noProjects')}
-            </h3>
-            <p className="text-gray-500 dark:text-foreground-tertiary mb-6">
-              {t('history.createFirst')}
-            </p>
-            <Button variant="primary" onClick={() => navigate('/')}>
-              {t('home.actions.createProject')}
-            </Button>
-          </Card>
-        ) : (
-          <div className="space-y-4">
-            {/* 全选工具栏 */}
-            {projects.length > 0 && (
-              <div className="flex items-center gap-3 pb-2 border-b border-gray-200 dark:border-border-primary">
-                <label className="flex items-center gap-2 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={selectedProjects.size === projects.length && projects.length > 0}
-                    onChange={handleSelectAll}
-                    className="w-4 h-4 text-banana-600 border-gray-300 dark:border-border-primary rounded focus:ring-banana-500"
-                  />
-                  <span className="text-sm text-gray-700 dark:text-foreground-secondary">
-                    {selectedProjects.size === projects.length ? t('common.deselectAll') : t('common.selectAll')}
-                  </span>
-                </label>
-              </div>
-            )}
-            
-            {projects.map((project) => {
+        </div>
+      ) : (
+        <section className="space-y-4">
+          <div className="hidden overflow-hidden rounded-lg border border-gray-200 bg-white shadow-sm lg:block">
+            <table className="min-w-full divide-y divide-gray-200">
+              <thead className="bg-gray-50">
+                <tr>
+                  <th className="w-10 px-4 py-3 text-left">
+                    <input
+                      type="checkbox"
+                      checked={selectedProjects.size === filteredProjects.length && filteredProjects.length > 0}
+                      onChange={handleSelectAll}
+                      className="h-4 w-4 rounded border-gray-300 text-amber-600 focus:ring-amber-500"
+                    />
+                  </th>
+                  {[t('history.projectName'), '状态', t('history.pages'), t('history.source'), t('history.updatedAt'), t('history.recentExport'), t('history.actions')].map((heading) => (
+                    <th key={heading} className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">
+                      {heading}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-100 bg-white">
+                {filteredProjects.map((project) => {
+                  const projectId = project.id || project.project_id;
+                  if (!projectId) return null;
+                  const title = getProjectTitle(project);
+                  const pageCount = project.pages?.length || 0;
+                  return (
+                    <tr key={projectId} className="hover:bg-gray-50">
+                      <td className="px-4 py-4">
+                        <input
+                          type="checkbox"
+                          checked={selectedProjects.has(projectId)}
+                          onChange={() => handleToggleSelect(projectId)}
+                          className="h-4 w-4 rounded border-gray-300 text-amber-600 focus:ring-amber-500"
+                        />
+                      </td>
+                      <td className="max-w-[320px] px-4 py-4">
+                        {editingProjectId === projectId ? (
+                          <input
+                            type="text"
+                            value={editingTitle}
+                            onChange={(event) => setEditingTitle(event.target.value)}
+                            onKeyDown={(event) => handleTitleKeyDown(event, projectId)}
+                            onBlur={() => handleSaveEdit(projectId)}
+                            autoFocus
+                            className="h-9 w-full rounded-md border border-amber-300 px-2 text-sm text-gray-900 outline-none focus:ring-2 focus:ring-amber-200"
+                          />
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={(event) => handleStartEdit(event, project)}
+                            className="block max-w-full truncate text-left text-sm font-medium text-gray-900 hover:text-amber-700"
+                            title={title}
+                          >
+                            {title}
+                          </button>
+                        )}
+                        <p className="mt-1 truncate text-xs text-gray-500">{projectId}</p>
+                      </td>
+                      <td className="px-4 py-4">
+                        <span className={`rounded px-2 py-1 text-xs font-medium ${getStatusColor(project)}`}>
+                          {getStatusText(project)}
+                        </span>
+                      </td>
+                      <td className="px-4 py-4 text-sm text-gray-600">{pageCount}</td>
+                      <td className="px-4 py-4 text-sm text-gray-600">{getProjectSource(project)}</td>
+                      <td className="px-4 py-4 text-sm text-gray-600">{formatDate(project.updated_at || project.created_at)}</td>
+                      <td className="px-4 py-4 text-sm text-gray-500">{t('history.noExport')}</td>
+                      <td className="px-4 py-4">
+                        <div className="flex items-center gap-2">
+                          <Button size="sm" variant="secondary" onClick={() => handleSelectProject(project)}>
+                            {t('history.continueEdit')}
+                          </Button>
+                          <button
+                            type="button"
+                            onClick={(event) => handleDeleteProject(event, project)}
+                            className="rounded-md p-2 text-gray-400 hover:bg-red-50 hover:text-red-600"
+                            title={t('common.delete')}
+                          >
+                            <Trash2 size={16} />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+
+          <div className="space-y-3 lg:hidden">
+            {filteredProjects.map((project) => {
               const projectId = project.id || project.project_id;
               if (!projectId) return null;
-
+              const title = getProjectTitle(project);
               return (
-                <ProjectCard
-                  key={projectId}
-                  project={project}
-                  isSelected={selectedProjects.has(projectId)}
-                  isEditing={editingProjectId === projectId}
-                  editingTitle={editingTitle}
-                  onSelect={handleSelectProject}
-                  onToggleSelect={handleToggleSelect}
-                  onDelete={handleDeleteProject}
-                  onStartEdit={handleStartEdit}
-                  onTitleChange={setEditingTitle}
-                  onTitleKeyDown={handleTitleKeyDown}
-                  onSaveEdit={handleSaveEdit}
-                  isBatchMode={selectedProjects.size > 0}
-                />
+                <div key={projectId} className="rounded-lg border border-gray-200 bg-white p-4 shadow-sm">
+                  <div className="flex items-start gap-3">
+                    <input
+                      type="checkbox"
+                      checked={selectedProjects.has(projectId)}
+                      onChange={() => handleToggleSelect(projectId)}
+                      className="mt-1 h-4 w-4 rounded border-gray-300 text-amber-600 focus:ring-amber-500"
+                    />
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-2">
+                        <h3 className="truncate text-sm font-semibold text-gray-900">{title}</h3>
+                        <span className={`rounded px-2 py-1 text-xs font-medium ${getStatusColor(project)}`}>
+                          {getStatusText(project)}
+                        </span>
+                      </div>
+                      <div className="mt-3 grid grid-cols-2 gap-2 text-xs text-gray-500">
+                        <span><FileText size={13} className="mr-1 inline" />{project.pages?.length || 0} {t('history.pages')}</span>
+                        <span><Clock size={13} className="mr-1 inline" />{formatDate(project.updated_at || project.created_at)}</span>
+                        <span><ImageIcon size={13} className="mr-1 inline" />{getProjectSource(project)}</span>
+                        <span>{t('history.noExport')}</span>
+                      </div>
+                      <div className="mt-4 flex items-center gap-2">
+                        <Button size="sm" onClick={() => handleSelectProject(project)}>{t('history.continueEdit')}</Button>
+                        <Button size="sm" variant="secondary" onClick={(event) => handleDeleteProject(event, project)}>{t('common.delete')}</Button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
               );
             })}
-
-            {/* 分页 */}
-            <div className="pt-4">
-              <Pagination
-                currentPage={currentPage}
-                totalPages={totalPages}
-                onPageChange={handlePageChange}
-                pageSize={pageSize}
-                onPageSizeChange={handlePageSizeChange}
-                pageSizeLabel={t('history.perPage')}
-              />
-            </div>
           </div>
-        )}
-      </main>
+
+          {filteredProjects.length === 0 && (
+            <div className="rounded-lg border border-dashed border-gray-300 bg-white p-8 text-center text-sm text-gray-500">
+              没有匹配当前搜索和筛选条件的项目。
+            </div>
+          )}
+
+          <Pagination
+            currentPage={currentPage}
+            totalPages={totalPages}
+            onPageChange={handlePageChange}
+            pageSize={pageSize}
+            onPageSizeChange={handlePageSizeChange}
+            pageSizeLabel={t('history.perPage')}
+          />
+        </section>
+      )}
+
       <ToastContainer toasts={toasts} onRemove={remove} />
       {ConfirmDialog}
     </div>
