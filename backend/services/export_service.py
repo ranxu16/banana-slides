@@ -25,6 +25,11 @@ import io
 import tempfile
 import img2pdf
 import fitz  # PyMuPDF
+from services.editable_pptx_pipeline import (
+    EditablePptxVisualPipeline,
+    SlideStructure,
+    VisualPipelineServiceError,
+)
 from utils.pptx_math import latex_to_display_text, looks_like_latex_math
 logger = logging.getLogger(__name__)
 
@@ -178,116 +183,6 @@ class ExportWarnings:
         }
 
 
-# ---------------------------------------------------------------------------
-# 视觉结构分析相关数据类与工具（Visual Structure Analysis）
-# ---------------------------------------------------------------------------
-
-@dataclass
-class SlideStructure:
-    """
-    Vision 模型对单张幻灯片的视觉结构分析结果。
-    background_type 为 'solid'/'gradient'/'image'；
-    shapes 中每项对应一个可渲染的矢量形状。
-    """
-    background_type: str = 'image'
-    background_color: Optional[str] = None  # '#RRGGBB'，仅 solid 时有效
-    shapes: List[Dict] = field(default_factory=list)
-    image_layers: List[Dict] = field(default_factory=list)
-    # shapes 每项结构：
-    # {shape_type, bbox:[x0,y0,x1,y1], fill_color, corner_radius,
-    #  transparency, border_color, border_width_px, shadow}
-
-
-_VISUAL_STRUCTURE_PROMPT = """\
-你是PPT视觉结构分析专家。目标：将幻灯片的视觉元素**尽可能多地分解为独立可编辑图层**。
-请系统地从底层到顶层识别所有有颜色填充的形状和非文字图片元素，**只返回JSON，不要任何说明文字**。
-
-## 背景分析
-判断幻灯片整体背景类型：
-- "solid"：整个背景是均匀纯色（包括深色/浅色纯色背景）
-- "gradient"：背景有渐变色
-- "image"：背景包含照片、纹理或复杂图案
-
-## 形状识别（重要：请尽量多识别，宁多勿少）
-**从底层到顶层**，识别所有以下类型的视觉形状：
-
-1. **大面积背景色块**：占据幻灯片大部分区域的有色区域（如深色背景、标题背景色块）
-2. **标题栏/顶部色条**：顶部或底部的横向色条
-3. **内容卡片**：承载文字或图标的圆角矩形、矩形卡片，包括白色/浅色卡片
-4. **信息面板/侧边栏**：左侧或右侧的纵向色块
-5. **数字/序号背景**：圆形、菱形等小型编号容器
-6. **标签/徽章**：小型标注、pill形状、tag形状
-7. **进度条/时间线**：横向或纵向的条状色块
-8. **图标容器**：承载图标的圆形或方形背景
-9. **时间轴线条**：水平或垂直的渐变/纯色线条（任意宽度，哪怕只有2px，只要是独立的色条）
-10. **时间轴节点**：线条上的小圆形/圆点（彩色实心圆），用 ellipse 类型识别
-11. **分隔装饰**：有明显宽度（≥3px）的横线或竖线色块
-12. **半透明蒙层**：带透明度的覆盖层
-
-**关键提示：**
-- 即使卡片/色块颜色接近背景色（如白色卡片在浅色背景上），只要有可见边框、阴影或轻微颜色差异，也必须识别
-- 圆角矩形卡片哪怕边框只有1-2px细线也要识别，fill_color 取卡片内部填充色
-- 时间轴上的彩色圆点（通常直径10-30px）必须用 ellipse 类型识别，fill_color 取圆点颜色
-- 宁可多识别（后续可手动删除），不要漏识别
-**只要能目视区分为独立色块/形状的，都应当识别出来。忽略：纯文字本身。**
-
-## 非文字图片层识别（必须拆层）
-请额外识别所有不能用普通 PPT 形状高保真表达、但应当在 PPT 中独立拖动的内容元素：
-- 图标、复杂 icon、logo、徽章、钻石、贴纸、3D 插画、中心大图、人物/产品/设备图
-- 卡片内的独立装饰图形、模块图标、复杂渐变图案
-- 数据图中的非文字图形块（如果不是简单矩形/圆形）
-
-不要把图标、文字和卡片合成一张图；卡片/容器应放在 shapes，图标/复杂插画应放在 image_layers。
-背景圆环、连线、光效、点阵、纯装饰纹理可以作为 background/decorative 图层；承载内容的模块元素必须独立拆出来。
-
-图片分辨率：{width}x{height} 像素
-已识别的文本元素坐标参考（用于辅助定位承载文字的容器）：
-{text_elements_json}
-
-返回格式（严格JSON，不要注释）：
-{{
-  "background": {{
-    "type": "solid",
-    "color": "#1A1A2E"
-  }},
-  "shapes": [
-    {{
-      "type": "rounded_rect",
-      "bbox": [120, 200, 800, 500],
-      "fill_color": "#2D2D44",
-      "corner_radius": 0.1,
-      "transparency": 0.0,
-      "border_color": null,
-      "border_width_px": 0,
-      "shadow": {{"blur_pt": 6, "offset_y_pt": 3, "color": "#000000", "opacity": 0.25}}
-    }}
-  ],
-  "image_layers": [
-    {{
-      "type": "icon",
-      "bbox": [160, 260, 230, 330],
-      "description": "white outline rocket icon inside the top-left module",
-      "transparent_background": true,
-      "role": "content"
-    }}
-  ]
-}}
-
-字段说明：
-- type: "rect"（矩形）、"rounded_rect"（圆角矩形）、"ellipse"（椭圆/圆形）
-- bbox: [x_left, y_top, x_right, y_bottom]，坐标必须在 [0,0,{width},{height}] 范围内
-- fill_color: 十六进制颜色 "#RRGGBB"，必须填写
-- corner_radius: 0.0~0.5，圆角程度（仅 rounded_rect 有效）
-- transparency: 0.0（不透明）~ 1.0（完全透明）
-- border_color: 边框颜色或 null
-- border_width_px: 边框宽度像素，无边框填 0
-- shadow: 有阴影填写 {{"blur_pt":..., "offset_y_pt":..., "color":"#000000", "opacity":...}}，无阴影填 null
-- background.color：背景是纯色时填十六进制颜色，其他情况填 null
-- shapes 可以为空 []，但请尽量多识别
-- image_layers 可以为空 []；role 为 "content" 或 "decorative"，内容模块内的图标/插画必须为 content
-"""
-
-
 def _get_page_size_inches(aspect_ratio: str = '16:9', base: float = 10.0) -> Tuple[float, float]:
     """Return (width, height) in inches for a given aspect ratio string."""
     try:
@@ -318,6 +213,21 @@ class ExportService:
     }
 
     @staticmethod
+    def _is_ai_service_error(error: Exception) -> bool:
+        """Return True for provider/config errors that should be shown directly."""
+        return EditablePptxVisualPipeline.is_ai_service_error(error)
+
+    @staticmethod
+    def _build_visual_structure_service_error(error: Exception, page_idx: Optional[int] = None) -> ExportError:
+        page_prefix = f"第 {page_idx + 1} 页 " if page_idx is not None else ""
+        return ExportError(
+            message=f"{page_prefix}GPT 视觉结构分析服务调用失败：{error}",
+            error_type='service',
+            details={'page': page_idx + 1 if page_idx is not None else None, 'cause': str(error)},
+            help_text='GPT 视觉结构分析需要可用的 image caption / 视觉模型额度。请检查 OpenAI 兼容接口额度、限流、API Key 与 image caption 模型配置。'
+        )
+
+    @staticmethod
     def _analyze_slide_visual_structure(
         image_path: str,
         text_elements: List[Dict],
@@ -339,79 +249,15 @@ class ExportService:
             SlideStructure 或 None
         """
         try:
-            # 截断：最多 80 个元素，每个元素文字取前 20 字符
-            safe_elements = [
-                {'id': e['id'], 'text': e['text'][:20], 'bbox': e['bbox']}
-                for e in text_elements[:80]
-            ]
-            prompt = _VISUAL_STRUCTURE_PROMPT.format(
-                width=image_width,
-                height=image_height,
-                text_elements_json=json.dumps(safe_elements, ensure_ascii=False),
+            return EditablePptxVisualPipeline().analyze_slide_structure(
+                image_path=image_path,
+                text_elements=text_elements,
+                ai_service=ai_service,
+                image_width=image_width,
+                image_height=image_height,
             )
-            result = ai_service.generate_json_with_image(prompt=prompt, image_path=image_path)
-
-            structure = SlideStructure()
-            if not isinstance(result, dict):
-                logger.warning("视觉结构分析: 返回值不是 dict，跳过")
-                return None
-
-            bg = result.get('background', {}) or {}
-            structure.background_type  = bg.get('type', 'image')
-            structure.background_color = bg.get('color')
-
-            for s in result.get('shapes', []) or []:
-                bbox = s.get('bbox', [])
-                if (
-                    len(bbox) != 4
-                    or bbox[2] <= bbox[0]
-                    or bbox[3] <= bbox[1]
-                    or bbox[0] < 0 or bbox[1] < 0
-                    or bbox[2] > image_width * 1.05   # 允许 5% 误差
-                    or bbox[3] > image_height * 1.05
-                ):
-                    logger.debug(f"视觉结构分析: 无效 bbox {bbox}，跳过该形状")
-                    continue
-                structure.shapes.append({
-                    'shape_type':      s.get('type', 'rect'),
-                    'bbox':            [int(v) for v in bbox],
-                    'fill_color':      s.get('fill_color'),
-                    'corner_radius':   float(s.get('corner_radius', 0.1)),
-                    'transparency':    float(s.get('transparency', 0.0)),
-                    'border_color':    s.get('border_color'),
-                    'border_width_px': float(s.get('border_width_px', 0)),
-                    'shadow':          s.get('shadow'),
-                })
-
-            for layer in result.get('image_layers', []) or []:
-                bbox = layer.get('bbox', [])
-                if (
-                    len(bbox) != 4
-                    or bbox[2] <= bbox[0]
-                    or bbox[3] <= bbox[1]
-                    or bbox[0] < 0 or bbox[1] < 0
-                    or bbox[2] > image_width * 1.05
-                    or bbox[3] > image_height * 1.05
-                ):
-                    logger.debug(f"视觉结构分析: 无效 image_layer bbox {bbox}，跳过")
-                    continue
-                structure.image_layers.append({
-                    'type': layer.get('type', 'image'),
-                    'bbox': [int(v) for v in bbox],
-                    'description': layer.get('description') or '',
-                    'transparent_background': bool(layer.get('transparent_background', False)),
-                    'role': layer.get('role', 'content'),
-                })
-
-            logger.info(
-                f"视觉结构分析完成: background={structure.background_type}({structure.background_color}), "
-                f"shapes={len(structure.shapes)}, image_layers={len(structure.image_layers)}"
-            )
-            return structure
-
-        except Exception as e:
-            logger.warning(f"视觉结构分析失败，将跳过形状渲染: {e}")
-            return None
+        except VisualPipelineServiceError as e:
+            raise ExportService._build_visual_structure_service_error(e) from e
 
     @staticmethod
     def _apply_slide_transition(slide, effect: str) -> None:
@@ -468,45 +314,39 @@ class ExportService:
         slide_element.insert(insert_at, transition)
 
     @staticmethod
-    def _crop_visual_image_layers(
+    def _build_layer_generation_prompt(layer: Dict[str, Any]) -> str:
+        """Build a strict prompt for generating one independent visual layer."""
+        return EditablePptxVisualPipeline.build_layer_generation_prompt(layer)
+
+    @staticmethod
+    def _generate_visual_image_layers_with_gpt(
         image_path: str,
         image_layers: List[Dict],
         output_dir: Path,
         page_idx: int,
+        ai_service,
+        *,
+        warnings: Optional[ExportWarnings] = None,
+        fail_fast: bool = True,
     ) -> List[Dict]:
-        """Materialize Vision-discovered non-text layers as independent image files."""
-        if not image_layers:
-            return []
-
-        output_dir.mkdir(parents=True, exist_ok=True)
-        materialized = []
-
+        """Generate independent image-layer PNG files using the configured GPT image model."""
         try:
-            with Image.open(image_path) as source:
-                source = source.convert('RGBA')
-                for idx, layer in enumerate(image_layers):
-                    bbox = layer.get('bbox') or []
-                    if len(bbox) != 4:
-                        continue
-                    crop_box = (
-                        max(0, int(bbox[0])),
-                        max(0, int(bbox[1])),
-                        min(source.width, int(bbox[2])),
-                        min(source.height, int(bbox[3])),
-                    )
-                    if crop_box[2] <= crop_box[0] or crop_box[3] <= crop_box[1]:
-                        continue
-                    cropped = source.crop(crop_box)
-                    layer_path = output_dir / f"page_{page_idx + 1}_layer_{idx + 1}.png"
-                    cropped.save(layer_path)
-                    materialized.append({
-                        **layer,
-                        'image_path': str(layer_path),
-                    })
-        except Exception as e:
-            logger.warning(f"视觉图片层裁切失败，已跳过: {e}")
-
-        return materialized
+            return EditablePptxVisualPipeline().materialize_image_layers(
+                image_path=image_path,
+                image_layers=image_layers,
+                output_dir=output_dir,
+                page_idx=page_idx,
+                ai_service=ai_service,
+                warnings=warnings,
+                fail_fast=fail_fast,
+            )
+        except VisualPipelineServiceError as e:
+            raise ExportError(
+                message=str(e),
+                error_type='image_add',
+                details={'image_path': image_path, 'page': page_idx + 1},
+                help_text='独立图层生成依赖 gpt-image-2。请检查 OpenAI 图片模型配置和网络后重新导出。'
+            ) from e
 
     @staticmethod
     def _build_visual_background_without_layers(
@@ -516,71 +356,12 @@ class ExportService:
         page_idx: int,
     ) -> Optional[str]:
         """Create a background image with Vision-discovered content regions removed."""
-        if not structure or (not structure.shapes and not structure.image_layers):
-            return None
-
-        output_dir.mkdir(parents=True, exist_ok=True)
-
-        try:
-            with Image.open(image_path) as source:
-                bg = source.convert('RGB')
-                width, height = bg.size
-                regions = []
-
-                for spec in structure.shapes:
-                    bbox = spec.get('bbox') or []
-                    if len(bbox) != 4:
-                        continue
-                    area = max(0, bbox[2] - bbox[0]) * max(0, bbox[3] - bbox[1])
-                    if area / max(1, width * height) < 0.75:
-                        regions.append(bbox)
-
-                for layer in structure.image_layers:
-                    if layer.get('role', 'content') == 'content':
-                        bbox = layer.get('bbox') or []
-                        if len(bbox) == 4:
-                            regions.append(bbox)
-
-                if not regions:
-                    return None
-
-                for bbox in regions:
-                    x0, y0, x1, y1 = [int(v) for v in bbox]
-                    x0 = max(0, min(width - 1, x0))
-                    y0 = max(0, min(height - 1, y0))
-                    x1 = max(x0 + 1, min(width, x1))
-                    y1 = max(y0 + 1, min(height, y1))
-                    pad = max(6, int(min(x1 - x0, y1 - y0) * 0.08))
-
-                    sample_box = (
-                        max(0, x0 - pad),
-                        max(0, y0 - pad),
-                        min(width, x1 + pad),
-                        min(height, y1 + pad),
-                    )
-                    sample = bg.crop(sample_box)
-                    pixels = list(sample.getdata())
-                    inner_x0 = x0 - sample_box[0]
-                    inner_y0 = y0 - sample_box[1]
-                    inner_x1 = x1 - sample_box[0]
-                    inner_y1 = y1 - sample_box[1]
-                    border_pixels = [
-                        pixel for idx, pixel in enumerate(pixels)
-                        if not (
-                            inner_x0 <= idx % sample.width < inner_x1
-                            and inner_y0 <= idx // sample.width < inner_y1
-                        )
-                    ] or pixels
-                    med = tuple(sorted(pixel[c] for pixel in border_pixels)[len(border_pixels) // 2] for c in range(3))
-                    fill = Image.new('RGB', (x1 - x0, y1 - y0), med)
-                    bg.paste(fill, (x0, y0))
-
-                bg_path = output_dir / f"page_{page_idx + 1}_visual_background.png"
-                bg.save(bg_path)
-                return str(bg_path)
-        except Exception as e:
-            logger.warning(f"生成视觉拆层背景失败，已回退原背景: {e}")
-            return None
+        return EditablePptxVisualPipeline().build_background_without_layers(
+            image_path=image_path,
+            structure=structure,
+            output_dir=output_dir,
+            page_idx=page_idx,
+        )
 
     @staticmethod
     def _sample_region_color(image: Image.Image, bbox: List[int]) -> str:
@@ -1961,6 +1742,7 @@ class ExportService:
         
         # 2.5 & 2.7. 并行执行：文本样式提取 + 视觉结构分析（两者完全独立，同时启动）
         slide_structures: List[Optional[SlideStructure]] = [None] * len(editable_images)
+        visual_structure_errors: List[ExportError] = []
         text_styles_cache = {}
 
         from concurrent.futures import ThreadPoolExecutor as _TPool, Future as _Future
@@ -1972,7 +1754,7 @@ class ExportService:
             if not enable_visual_structure_analysis:
                 return
             try:
-                from services.ai_service import get_ai_service
+                from services.ai_service_manager import get_ai_service
                 _vis_ai = get_ai_service()
                 _results: List[Optional[SlideStructure]] = [None] * len(editable_images)
 
@@ -2002,6 +1784,18 @@ class ExportService:
                             _i, _s = _f.result()
                             _results[_i] = _s
                         except Exception as _fe:
+                            _page_idx = _futs[_f]
+                            if isinstance(_fe, ExportError):
+                                visual_structure_errors.append(
+                                    ExportService._build_visual_structure_service_error(
+                                        _fe,
+                                        page_idx=_page_idx,
+                                    ) if _fe.details.get('page') is None else _fe
+                                )
+                            elif ExportService._is_ai_service_error(_fe):
+                                visual_structure_errors.append(
+                                    ExportService._build_visual_structure_service_error(_fe, page_idx=_page_idx)
+                                )
                             logger.warning(f"视觉结构分析单页失败（已跳过）: {_fe}")
 
                 # 写回共享列表
@@ -2009,6 +1803,12 @@ class ExportService:
                     slide_structures[_i] = _s
                 logger.info(f"视觉结构分析完成: {sum(1 for s in slide_structures if s is not None)}/{len(slide_structures)} 页成功")
             except Exception as _e:
+                if isinstance(_e, ExportError):
+                    visual_structure_errors.append(_e)
+                elif ExportService._is_ai_service_error(_e):
+                    visual_structure_errors.append(
+                        ExportService._build_visual_structure_service_error(_e)
+                    )
                 logger.warning(f"视觉结构分析阶段出错，已跳过: {_e}")
 
         # --- 文本样式提取任务 ---
@@ -2077,12 +1877,26 @@ class ExportService:
         if not text_styles_cache:
             text_styles_cache = _apply_text_color_only_fallback()
 
+        if enable_visual_structure_analysis and visual_structure_errors and fail_fast:
+            raise visual_structure_errors[0]
+
         for _idx, _eimg in enumerate(editable_images):
             if slide_structures[_idx] is None or (
                 not slide_structures[_idx].shapes
                 and not slide_structures[_idx].image_layers
             ):
-                slide_structures[_idx] = ExportService._build_heuristic_slide_structure(_eimg)
+                if enable_visual_structure_analysis:
+                    message = f"第 {_idx + 1} 页 GPT 视觉结构分析未返回有效图层"
+                    warnings.add_warning(message)
+                    if fail_fast:
+                        raise ExportError(
+                            message=message,
+                            error_type='style_extraction',
+                            details={'page': _idx + 1},
+                            help_text='请检查 image caption / GPT 视觉模型配置。可编辑 PPTX 需要先由 GPT 完成图层识别，再由 gpt-image-2 生成独立元素。'
+                        )
+                else:
+                    slide_structures[_idx] = ExportService._build_heuristic_slide_structure(_eimg)
         report_progress("并行分析", "✓ 文本样式提取与视觉结构分析均已完成", 70)
         
         report_progress("构建PPTX", "开始构建可编辑PPTX文件...", 75)
@@ -2091,6 +1905,9 @@ class ExportService:
         builder = PPTXBuilder()
         builder.create_presentation()
         builder.setup_presentation_size(slide_width_pixels, slide_height_pixels)
+        visual_pipeline = EditablePptxVisualPipeline()
+        from services.ai_service_manager import get_ai_service as _get_visual_ai_service
+        visual_ai_service = _get_visual_ai_service()
         
         # 5. 为每个页面构建幻灯片
         total_pages = len(editable_images)
@@ -2106,76 +1923,33 @@ class ExportService:
             # 获取本页视觉结构（在背景处理前就需要知道背景类型）
             _structure = slide_structures[page_idx] if slide_structures else None
 
-            # 添加背景：纯色背景用矢量色底，其他情况用截图
-            _use_solid_bg = (
-                _structure is not None
-                and _structure.background_type == 'solid'
-                and _structure.background_color
-            )
-            if _use_solid_bg:
-                logger.info(f"    使用纯色矢量背景: {_structure.background_color}")
-                builder.set_slide_background_color(slide, _structure.background_color)
-            else:
-                raw_bg_path = (
-                    editable_img.clean_background
-                    if editable_img.clean_background and os.path.exists(editable_img.clean_background)
-                    else editable_img.image_path
+            # 添加 GPT 视觉流水线产物：背景、矢量形状、独立图片图层
+            try:
+                visual_pipeline.compose_visual_layers(
+                    builder=builder,
+                    slide=slide,
+                    editable_img=editable_img,
+                    structure=_structure,
+                    page_idx=page_idx,
+                    ai_service=visual_ai_service,
+                    warnings=warnings,
+                    fail_fast=fail_fast,
                 )
-                visual_output_dir = Path(raw_bg_path).parent / 'visual_layers'
-                bg_path = (
-                    ExportService._build_visual_background_without_layers(
-                        raw_bg_path,
-                        _structure,
-                        visual_output_dir,
-                        page_idx,
-                    )
-                    if _structure is not None
-                    else None
-                ) or raw_bg_path
-                logger.info(f"    添加背景图: {bg_path}")
-                try:
-                    slide.shapes.add_picture(
-                        bg_path,
-                        left=0,
-                        top=0,
-                        width=builder.prs.slide_width,
-                        height=builder.prs.slide_height
-                    )
-                except Exception as e:
-                    logger.error(f"Failed to add background: {e}")
-
-            # 插入 Vision 识别出的矢量形状（卡片背景等）
-            if _structure and _structure.shapes:
-                logger.info(f"    添加 {len(_structure.shapes)} 个视觉结构形状")
-                for _spec in _structure.shapes:
-                    try:
-                        builder.add_shape_element(
-                            slide=slide,
-                            dpi=96,
-                            **_spec
-                        )
-                    except Exception as _e:
-                        logger.warning(f"    形状渲染失败（已跳过）: {_e}")
-
-            # 插入 Vision 识别出的复杂图片层（图标、徽章、3D 插画等）
-            if _structure and _structure.image_layers:
-                visual_output_dir = Path(editable_img.image_path).parent / 'visual_layers'
-                materialized_layers = ExportService._crop_visual_image_layers(
-                    editable_img.image_path,
-                    _structure.image_layers,
-                    visual_output_dir,
-                    page_idx,
-                )
-                logger.info(f"    添加 {len(materialized_layers)} 个视觉图片层")
-                for _layer in materialized_layers:
-                    try:
-                        builder.add_image_element(
-                            slide=slide,
-                            image_path=_layer['image_path'],
-                            bbox=_layer['bbox'],
-                        )
-                    except Exception as _e:
-                        logger.warning(f"    视觉图片层渲染失败（已跳过）: {_e}")
+            except VisualPipelineServiceError as _e:
+                raise ExportError(
+                    message=str(_e),
+                    error_type='image_add',
+                    details={'page': page_idx + 1},
+                    help_text='可编辑 PPTX 视觉流水线依赖 GPT 视觉模型和 gpt-image-2。请检查 OpenAI 兼容接口额度、限流、API Key 与图片模型配置。'
+                ) from _e
+            except Exception as e:
+                logger.error(f"Failed to compose visual layers: {e}")
+                if fail_fast:
+                    raise ExportError(
+                        message=f"第 {page_idx + 1} 页视觉图层合成失败: {e}",
+                        error_type='image_add',
+                        details={'page': page_idx + 1},
+                    ) from e
 
             # 添加所有元素（递归地）
             # 计算缩放比例：将原始图片坐标映射到统一的幻灯片坐标

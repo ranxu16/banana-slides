@@ -57,7 +57,7 @@ def get_provider_format() -> str:
     Priority:
         1. Flask app.config['AI_PROVIDER_FORMAT'] (from database settings)
         2. Environment variable AI_PROVIDER_FORMAT
-        3. Default: 'gemini'
+        3. Default: 'openai'
 
     Returns:
         "gemini", "openai", "vertex", "lazyllm", or a lazyllm vendor name
@@ -75,7 +75,7 @@ def get_provider_format() -> str:
         pass
 
     # Fallback to environment variable
-    return os.getenv('AI_PROVIDER_FORMAT', 'gemini').lower()
+    return os.getenv('AI_PROVIDER_FORMAT', 'openai').lower()
 
 
 def _resolve_setting(key: str, fallback: Optional[str] = None) -> Optional[str]:
@@ -173,17 +173,25 @@ def _build_provider_config() -> Dict[str, Any]:
         logger.info("Provider config — format: lazyllm, vendor: %s, text_source: %s, image_source: %s",
                      vendor, cfg['text_source'], cfg['image_source'])
 
-    else:
-        # gemini (default) or unknown format
-        if fmt != 'gemini':
-            logger.warning("Unknown provider format '%s', falling back to gemini", fmt)
-            cfg['format'] = 'gemini'
+    elif fmt == 'gemini':
         cfg['api_key'] = _resolve_setting('GOOGLE_API_KEY')
         cfg['api_base'] = _resolve_setting('GOOGLE_API_BASE')
         if not cfg['api_key']:
             raise ValueError("GOOGLE_API_KEY (from database settings or environment) is required")
         logger.info("Provider config — format: gemini, api_base: %s, api_key: %s",
                      cfg['api_base'], '***' if cfg['api_key'] else 'None')
+
+    else:
+        logger.warning("Unknown provider format '%s', falling back to openai", fmt)
+        cfg['format'] = 'openai'
+        cfg['api_key'] = _resolve_setting('OPENAI_API_KEY') or _resolve_setting('GOOGLE_API_KEY')
+        cfg['api_base'] = _resolve_setting('OPENAI_API_BASE', 'https://aihubmix.com/v1')
+        if not cfg['api_key']:
+            raise ValueError(
+                "OPENAI_API_KEY or GOOGLE_API_KEY (from database settings or environment) "
+                "is required when falling back to the OpenAI provider."
+            )
+        logger.info("Provider config — fallback format: openai, api_base: %s", cfg['api_base'])
 
     return cfg
 
@@ -318,7 +326,7 @@ def resolve_caption_model_for_provider(model: str, provider_format: str) -> str:
     return resolved
 
 
-def get_caption_provider(model: str = "gemini-3-flash-preview") -> TextProvider:
+def get_caption_provider(model: str = "gpt-5.5") -> TextProvider:
     """Factory: return a TextProvider for image caption (multimodal) tasks."""
     config = _get_model_type_provider_config('image_caption')
     fmt = config['format']
@@ -348,7 +356,7 @@ def get_caption_provider(model: str = "gemini-3-flash-preview") -> TextProvider:
         return GenAITextProvider(api_key=config['api_key'], api_base=config['api_base'], model=model)
 
 
-def get_text_provider(model: str = "gemini-3-flash-preview") -> TextProvider:
+def get_text_provider(model: str = "gpt-5.5") -> TextProvider:
     """Factory: return the appropriate text-generation provider."""
     config = _get_model_type_provider_config('text')
     fmt = config['format']
@@ -378,7 +386,7 @@ def get_text_provider(model: str = "gemini-3-flash-preview") -> TextProvider:
         return GenAITextProvider(api_key=config['api_key'], api_base=config['api_base'], model=model)
 
 
-def get_image_provider(model: str = "gemini-3-pro-image-preview") -> ImageProvider:
+def get_image_provider(model: str = "gpt-image-2") -> ImageProvider:
     """Factory: return the appropriate image-generation provider.
 
     Note: OpenAI format does NOT support 4K resolution — only 1K is available.
