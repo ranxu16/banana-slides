@@ -1288,3 +1288,12 @@ ui-guangfu-dashboard-redesign
 - 验证：`uv run --python 3.13 pytest backend/tests/unit/test_editable_pptx_equations.py -q` 通过，10 tests passed；`uv run --python 3.13 pytest backend/tests/unit -q` 通过，`411 passed / 5 skipped`；`git diff --check` 通过。
 - 遗留：当前工作区包含服务测试、runtime、文本能力和本次导出回归修复，尚未提交；图片/视觉 runtime、项目覆盖层、密钥加密和用户级 OAuth 仍未完成。
 - 下一步：阶段性提交本批改动；随后开始图片生成与视觉理解的请求级 runtime 和隔离 Provider 缓存。
+
+### 2026-07-01 19:35 - Phase 7 文本 runtime 阶段性提交完成
+
+- 范围：服务测试 effective config、`AIRuntimeConfig`、文本 Provider 隔离缓存、大纲/描述/文本自然语言修改接入、可编辑 PPTX `total_pages` 回归修复及对应测试/文档。
+- 动作：仅暂存本阶段明确文件，排除根目录与设计目录 `.DS_Store`；检查暂存差异后创建阶段提交。
+- 结果：提交 `12751cb feat(phase7): isolate user AI runtime for text workflows` 已生成，共 13 个文件，新增 `backend/services/ai_runtime.py` 和 `backend/tests/unit/test_ai_runtime_isolation.py`。
+- 验证：提交前 `git diff --cached --check` 通过；完整 unit 回归结果为 `411 passed / 5 skipped`。
+- 遗留：图片/视觉 runtime、可编辑 PPTX 与导出队列接入、项目覆盖、个人密钥加密、用户级 OAuth、个人 LazyLLM 隔离仍未完成。
+- 下一步：开始图片生成与视觉理解 runtime；先为显式图片/Caption Provider 工厂和隔离缓存补测试，再接业务入口。
