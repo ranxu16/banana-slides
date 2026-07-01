@@ -1347,3 +1347,12 @@ ui-guangfu-dashboard-redesign
 - 完整回归：`uv run --python 3.13 pytest backend/tests/unit -q` 通过，`418 passed / 5 skipped`，覆盖 runtime、设置、项目、图片、OAuth、LazyLLM、可编辑 PPTX、公式、视觉结构和导出任务。
 - 遗留：普通图片识别独立入口、导出队列 effective runtime、项目覆盖、个人密钥加密、用户级 OAuth、个人 LazyLLM 隔离及可编辑 PPTX 原图视觉对比自动校正仍未完成。
 - 下一步：提交本阶段，再接导出队列来源/失败原因和项目覆盖层。
+
+### 2026-07-01 21:30 - 可编辑 PPTX runtime 阶段提交完成
+
+- 范围：可编辑 PPTX 双 runtime、导出路由、后台任务、ExportService 注入、任务来源保留、错误分类、回归测试和设计记录。
+- 动作：仅暂存本阶段 8 个明确文件，排除 `.DS_Store`，检查暂存差异后创建独立提交。
+- 结果：提交 `eceea16 feat(phase7): isolate editable pptx visual runtime` 已生成，227 insertions、14 deletions。
+- 验证：定向测试 `46 passed`；错误分类修正后路由/runtime 测试 `19 passed`；完整后端 unit 回归 `418 passed / 5 skipped`；`git diff --cached --check` 通过。
+- 遗留：普通图片识别、导出队列 effective runtime、项目覆盖、个人密钥加密、用户级 OAuth、个人 LazyLLM 隔离、可编辑 PPTX 原图视觉对比自动校正仍未完成。
+- 下一步：接入导出任务的 effective 来源和 resolver 失败原因展示，再实现项目覆盖层并验证 `项目 > 个人 > 全局 > 系统默认` 优先级。
