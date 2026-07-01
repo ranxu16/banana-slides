@@ -2987,6 +2987,7 @@ export const SlidePreview: React.FC = () => {
             onSaveAspectRatio={handleSaveAspectRatio}
             isSavingAspectRatio={isSavingAspectRatio}
             hasImages={hasImages}
+            projectOverrides={currentProject?.project_overrides}
           />
         </>
       )}

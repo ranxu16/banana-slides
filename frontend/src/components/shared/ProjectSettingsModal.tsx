@@ -3,7 +3,7 @@ import { X, FileText, Settings as SettingsIcon, Download, Sparkles, AlertTriangl
 import { Button, Textarea } from '@/components/shared';
 import { useT } from '@/hooks/useT';
 import { Settings } from '@/pages/Settings';
-import type { ExportExtractorMethod, ExportInpaintMethod } from '@/types';
+import type { ExportExtractorMethod, ExportInpaintMethod, ProjectOverridesSummary } from '@/types';
 import { ASPECT_RATIO_OPTIONS } from '@/config/aspectRatio';
 
 // ProjectSettings 组件自包含翻译
@@ -12,6 +12,9 @@ const projectSettingsI18n = {
     projectSettings: {
       title: "设置", projectConfig: "项目设置", exportConfig: "导出设置", globalConfig: "全局设置",
       projectConfigTitle: "项目级配置", projectConfigDesc: "这些设置仅应用于当前项目，不影响其他项目",
+      projectOverridesTitle: "当前项目覆盖项",
+      projectOverridesDesc: "这些字段来自当前项目，会优先影响本项目的生成或导出行为。",
+      inheritanceNotTracked: "暂未区分继承全局与显式覆盖",
       globalConfigTitle: "全局设置", globalConfigDesc: "这些设置应用于所有项目",
       aspectRatio: "画面比例", aspectRatioDesc: "设置生成幻灯片图片的画面比例",
       aspectRatioLocked: "已生成图片的项目无法调整画面比例",
@@ -51,6 +54,9 @@ const projectSettingsI18n = {
     projectSettings: {
       title: "Settings", projectConfig: "Project Settings", exportConfig: "Export Settings", globalConfig: "Global Settings",
       projectConfigTitle: "Project-level Configuration", projectConfigDesc: "These settings only apply to the current project",
+      projectOverridesTitle: "Current Project Overrides",
+      projectOverridesDesc: "These fields come from the current project and take priority for this project.",
+      inheritanceNotTracked: "Inheritance vs explicit override is not tracked yet",
       globalConfigTitle: "Global Settings", globalConfigDesc: "These settings apply to all projects",
       aspectRatio: "Aspect Ratio", aspectRatioDesc: "Set the aspect ratio for generated slide images",
       aspectRatioLocked: "Cannot change aspect ratio after images have been generated",
@@ -116,6 +122,7 @@ interface ProjectSettingsModalProps {
   onSaveAspectRatio?: () => void;
   isSavingAspectRatio?: boolean;
   hasImages?: boolean;
+  projectOverrides?: ProjectOverridesSummary;
 }
 
 type SettingsTab = 'project' | 'global' | 'export';
@@ -148,6 +155,7 @@ export const ProjectSettingsModal: React.FC<ProjectSettingsModalProps> = ({
   onSaveAspectRatio,
   isSavingAspectRatio = false,
   hasImages = false,
+  projectOverrides,
 }) => {
   const t = useT(projectSettingsI18n);
   const [activeTab, setActiveTab] = useState<SettingsTab>('project');
@@ -164,6 +172,44 @@ export const ProjectSettingsModal: React.FC<ProjectSettingsModalProps> = ({
   ];
 
   if (!isOpen) return null;
+
+  const overrideFields = projectOverrides ? Object.entries(projectOverrides.fields) : [];
+  const projectOverrideFields = overrideFields.filter(([, field]) => field.group === 'project');
+  const exportOverrideFields = overrideFields.filter(([, field]) => field.group === 'export');
+
+  const formatOverrideValue = (value: ProjectOverridesSummary['fields'][string]['value']) => {
+    if (typeof value === 'boolean') return value ? '开启' : '关闭';
+    if (value === null || value === undefined || value === '') return '未设置';
+    return String(value);
+  };
+
+  const renderOverrideSummary = (fields: typeof overrideFields) => (
+    fields.length > 0 ? (
+      <div className="rounded-lg border border-blue-100 bg-blue-50 p-4">
+        <div className="flex flex-wrap items-start justify-between gap-2">
+          <div>
+            <h4 className="text-sm font-semibold text-blue-900">{t('projectSettings.projectOverridesTitle')}</h4>
+            <p className="mt-1 text-xs text-blue-700">{t('projectSettings.projectOverridesDesc')}</p>
+          </div>
+          {projectOverrides?.inheritance_tracking === false && (
+            <span className="rounded-md border border-blue-200 bg-white px-2 py-1 text-xs font-medium text-blue-700">
+              {t('projectSettings.inheritanceNotTracked')}
+            </span>
+          )}
+        </div>
+        <div className="mt-3 grid gap-2 sm:grid-cols-2">
+          {fields.map(([key, field]) => (
+            <div key={key} className="rounded-md border border-blue-100 bg-white px-3 py-2">
+              <div className="text-xs text-gray-500">{field.label}</div>
+              <div className="mt-1 truncate text-sm font-semibold text-gray-900" title={formatOverrideValue(field.value)}>
+                {formatOverrideValue(field.value)}
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    ) : null
+  );
 
   return (
     <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
@@ -227,6 +273,8 @@ export const ProjectSettingsModal: React.FC<ProjectSettingsModalProps> = ({
                     {t('projectSettings.projectConfigDesc')}
                   </p>
                 </div>
+
+                {renderOverrideSummary(projectOverrideFields)}
 
                 {/* 画面比例 */}
                 <div className="pb-6 border-b border-gray-200 dark:border-border-primary space-y-4">
@@ -341,6 +389,8 @@ export const ProjectSettingsModal: React.FC<ProjectSettingsModalProps> = ({
                     {t('projectSettings.editablePptxExportDesc')}
                   </p>
                 </div>
+
+                {renderOverrideSummary(exportOverrideFields)}
 
                 <div className="pb-6 border-b border-gray-200 dark:border-border-primary space-y-4">
                   <div>

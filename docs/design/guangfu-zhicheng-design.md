@@ -1387,3 +1387,13 @@ ui-guangfu-dashboard-redesign
 - 验证：`uv run --python 3.13 pytest backend/tests/unit/test_api_project.py::TestProjectGet backend/tests/unit/test_personal_settings_effective_config.py -q` 通过，10 tests passed；`npx eslint src/types/index.ts --ext ts --max-warnings 20` 通过。
 - 遗留：需要决定是否新增项目 override 元数据表/JSON 字段，以支持真正的“继承全局默认/启用项目覆盖”切换；AI 模型项目级覆盖仍需产品层确认后再建字段。
 - 下一步：把 `project_overrides` 接到全局配置中心的“项目覆盖”区和项目设置弹窗，先做只读来源展示，再补恢复全局默认/启用覆盖的真实存储设计。
+
+### 2026-07-01 23:00 - 项目设置弹窗覆盖摘要展示
+
+- 范围：`frontend/src/components/shared/ProjectSettingsModal.tsx`、`frontend/src/pages/SlidePreview.tsx`、`docs/design/guangfu-zhicheng-design.md`。
+- 动作：项目设置弹窗新增只读“当前项目覆盖项”摘要，在项目设置 tab 展示画面比例，在导出设置 tab 展示组件提取、背景获取、返回半成品、图标抠图和视觉结构分析；预览页传入当前项目的 `project_overrides`。
+- 结果：用户在项目内调整设置时，能直接看到这些字段属于当前项目值，并能看到“暂未区分继承全局与显式覆盖”的限制提示，避免误以为已经具备完整继承开关。
+- 计划状态：项目覆盖 schema 已从后端打到项目设置 UI；全局配置中心“项目覆盖”区仍是静态说明，尚未接入摘要。
+- 验证：`npm run guard:brand` 通过；`npx eslint src/components/shared/ProjectSettingsModal.tsx src/pages/SlidePreview.tsx --ext ts,tsx --max-warnings 20` 通过但保留既有 `SlidePreview.tsx` 未用 `Home` import 警告。
+- 遗留：还需要把项目覆盖摘要接到全局配置中心；真正的继承/恢复全局默认操作仍需新增项目 override 元数据存储。
+- 下一步：全局配置中心“项目覆盖”区接入最近项目/当前项目摘要，或先设计项目 override 元数据字段与迁移方案。
