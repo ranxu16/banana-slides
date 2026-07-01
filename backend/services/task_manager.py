@@ -1900,7 +1900,8 @@ def export_video_task(
 
                 task = Task.query.get(task_id)
                 if task:
-                    task.set_progress({
+                    progress = task.get_progress()
+                    progress.update({
                         "total": 100,
                         "completed": mapped_pct,
                         "failed": 0,
@@ -1908,10 +1909,12 @@ def export_video_task(
                         "percent": mapped_pct,
                         "messages": progress_messages.copy(),
                     })
+                    task.set_progress(progress)
                     db.session.commit()
             except Exception as e:
                 logger.warning(f"更新进度失败: {e}")
 
+        placeholder_dir = None
         try:
             task = Task.query.get(task_id)
             if not task:
@@ -1927,7 +1930,8 @@ def export_video_task(
             logger.info(f"视频导出设置: export_allow_partial={export_allow_partial}, fail_fast={fail_fast}")
 
             task.status = 'PROCESSING'
-            task.set_progress({
+            progress = task.get_progress()
+            progress.update({
                 "total": 100,
                 "completed": 0,
                 "failed": 0,
@@ -1935,6 +1939,7 @@ def export_video_task(
                 "percent": 0,
                 "messages": progress_messages,
             })
+            task.set_progress(progress)
             db.session.commit()
 
             # 检查 FFmpeg
@@ -1955,7 +1960,6 @@ def export_video_task(
 
             # 构建页面列表：有图片的用实际图片，无图片的根据选项处理
             valid_pages = []
-            placeholder_dir = None
 
             if include_no_image_pages:
                 video_width = app.config.get('VIDEO_OUTPUT_WIDTH', 1920)
@@ -2148,7 +2152,8 @@ def export_video_task(
             if task:
                 task.status = 'COMPLETED'
                 task.completed_at = datetime.utcnow()
-                task.set_progress({
+                progress = task.get_progress()
+                progress.update({
                     "total": 100,
                     "completed": 100,
                     "failed": 0,
@@ -2158,6 +2163,7 @@ def export_video_task(
                     "download_url": download_path,
                     "filename": filename,
                 })
+                task.set_progress(progress)
                 db.session.commit()
                 logger.info(f"✅ 任务 {task_id} 完成 - 视频已导出: {output_path}")
 

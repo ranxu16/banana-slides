@@ -1457,3 +1457,13 @@ ui-guangfu-dashboard-redesign
 - 验证：`uv run --python 3.13 pytest backend/tests/unit/test_export_editable_pptx_task.py -k "export_route_creates_pending_task_and_returns_task_id or export_route_records_request_override_for_visual_structure" -q` 通过，2 tests passed；`uv run --python 3.13 pytest backend/tests/unit/test_api_project.py::TestProjectGet -q` 通过，5 tests passed。
 - 遗留：helper 目前覆盖项目已有导出字段和画面比例；AI 模型项目级覆盖仍无字段定义，不应强行进入 runtime resolver。
 - 下一步：复用 helper 到视频导出任务并记录项目覆盖来源；随后统一普通导出任务或进入 AI 模型项目级覆盖字段设计。
+
+### 2026-07-02 01:20 - 视频导出任务复用项目覆盖来源
+
+- 范围：`backend/controllers/export_controller.py`、`backend/services/task_manager.py`、`backend/tests/unit/test_tts_video_service.py`、`docs/design/guangfu-zhicheng-design.md`。
+- 动作：视频导出任务创建时写入 `project_overrides` 和 `effective_export_options`；后台视频导出进度更新改为读取已有 progress 后增量更新，避免处理中/完成态把配置来源覆盖掉；新增路由测试验证显式 `export_allow_partial` 项目覆盖会进入视频导出任务，并补测 FFmpeg 早期失败时仍保留配置来源。
+- 结果：视频导出任务和可编辑 PPTX 导出任务开始共享同一套项目导出配置来源记录，导出任务排障可以看到“项目覆盖 / 继承或默认”的有效值来源；同时修复视频任务在 FFmpeg 检查前失败时 `placeholder_dir` 未初始化导致的二次异常。
+- 计划状态：可编辑 PPTX 与视频导出已接入项目覆盖来源；普通 PPTX/PDF 等导出任务仍未统一；AI 模型项目级覆盖字段仍待设计。
+- 验证：`FULL_TEST_ENV=1 uv run --python 3.13 pytest backend/tests/unit/test_tts_video_service.py -k "records_project_override_sources or normalized_narration_config or preserves_project_override_sources" -q` 通过，3 tests passed；`git diff --check` 通过。
+- 遗留：视频任务失败态目前只记录 error message，不额外改写 progress；当前增量保留策略已通过早期失败测试覆盖创建时配置来源不丢失。
+- 下一步：提交 `feat(phase7): record video export override sources`；然后启动本地应用，并继续进入普通 PPTX/PDF 导出任务来源统一或 AI 模型项目级覆盖字段设计。

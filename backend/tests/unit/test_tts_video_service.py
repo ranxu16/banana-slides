@@ -698,21 +698,86 @@ class TestExportVideoRoute:
 
     def test_export_video_returns_normalized_narration_config(self, client, app):
         project_id = self._create_project_with_image_page(app, allow_partial=True)
-        response = client.post(
-            f'/api/projects/{project_id}/export/video',
-            json={
-                'narration_config': {
-                    'speaker_persona': 'confident corporate executive',
-                    'min_words': 80,
-                    'max_words': 120,
+        with patch('services.task_manager.task_manager.submit_task'):
+            response = client.post(
+                f'/api/projects/{project_id}/export/video',
+                json={
+                    'narration_config': {
+                        'speaker_persona': 'confident corporate executive',
+                        'min_words': 80,
+                        'max_words': 120,
+                    },
                 },
-            },
-        )
+            )
         assert response.status_code == 200
         data = response.get_json()['data']
         assert data['narration_config']['speaker_persona'] == 'confident corporate executive'
         assert data['narration_config']['min_words'] == 80
         assert data['narration_config']['max_words'] == 120
+
+    def test_export_video_records_project_override_sources(self, client, app):
+        from models import db, Project, Task
+
+        project_id = self._create_project_with_image_page(app, allow_partial=True)
+        with app.app_context():
+            project = Project.query.get(project_id)
+            project.mark_project_override('export_allow_partial')
+            db.session.commit()
+
+        with patch('services.task_manager.task_manager.submit_task') as submit_task:
+            response = client.post(
+                f'/api/projects/{project_id}/export/video',
+                json={},
+            )
+
+        assert response.status_code == 200
+        data = response.get_json()['data']
+        assert submit_task.called
+
+        with app.app_context():
+            task = Task.query.get(data['task_id'])
+            progress = task.get_progress()
+
+        override_field = progress['project_overrides']['fields']['export_allow_partial']
+        effective_option = progress['effective_export_options']['export_allow_partial']
+        assert override_field['explicit'] is True
+        assert override_field['source'] == 'project_override'
+        assert effective_option['value'] is True
+        assert effective_option['source'] == 'project_override'
+
+    def test_export_video_task_preserves_project_override_sources_on_failure(self, app):
+        from models import db, Project, Task
+        from services.task_manager import export_video_task
+
+        with app.app_context():
+            project_id = self._create_project_with_image_page(app, allow_partial=True)
+            project = Project.query.get(project_id)
+            project.mark_project_override('export_allow_partial')
+            task = Task(project_id=project_id, task_type='EXPORT_VIDEO', status='PENDING')
+            task.set_progress({
+                'project_overrides': project.get_project_overrides_summary(),
+                'effective_export_options': project.get_effective_export_options(),
+            })
+            db.session.add(task)
+            db.session.commit()
+            task_id = task.id
+
+        with patch('services.tts_video_service.check_ffmpeg_available', return_value=False):
+            export_video_task(
+                task_id=task_id,
+                project_id=project_id,
+                filename='test-video.mp4',
+                file_service=MagicMock(),
+                app=app,
+            )
+
+        with app.app_context():
+            task = Task.query.get(task_id)
+            progress = task.get_progress()
+
+        assert task.status == 'FAILED'
+        assert progress['project_overrides']['fields']['export_allow_partial']['source'] == 'project_override'
+        assert progress['effective_export_options']['export_allow_partial']['source'] == 'project_override'
 
     def test_export_video_no_pages(self, client, sample_project):
         if not sample_project:

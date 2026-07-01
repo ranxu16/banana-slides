@@ -631,6 +631,10 @@ def export_video(project_id):
             task_type='EXPORT_VIDEO',
             status='PENDING',
         )
+        task.set_progress({
+            'project_overrides': project.get_project_overrides_summary(),
+            'effective_export_options': project.get_effective_export_options(),
+        })
         db.session.add(task)
         db.session.commit()
 
