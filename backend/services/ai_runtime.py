@@ -20,6 +20,8 @@ class AIRuntimeConfig:
     api_key: str | None = field(default=None, repr=False)
     api_base_url: str | None = None
     account_identity: str | None = None
+    image_api_protocol: str = "auto"
+    resolution: str = "2K"
     source_summary: dict[str, Any] = field(default_factory=dict, compare=False, hash=False)
 
     @classmethod
@@ -55,6 +57,8 @@ class AIRuntimeConfig:
             api_key=resolved.get(key_field) or resolved.get("api_key"),
             api_base_url=resolved.get(base_field) or resolved.get("api_base_url"),
             account_identity=resolved.get("_account_identity"),
+            image_api_protocol=str(resolved.get("openai_image_api_protocol") or "auto"),
+            resolution=str(resolved.get("image_resolution") or "2K"),
             source_summary=dict(resolved.get("_effective_source") or {}),
         )
 
@@ -63,7 +67,7 @@ class AIRuntimeConfig:
         return _fingerprint(self.api_key)
 
     @property
-    def cache_key(self) -> tuple[str, str, str, str, str, str]:
+    def cache_key(self) -> tuple[str, str, str, str, str, str, str, str]:
         return (
             self.capability,
             self.provider,
@@ -71,6 +75,8 @@ class AIRuntimeConfig:
             self.api_base_url or "",
             self.credential_fingerprint,
             self.account_identity or "",
+            self.image_api_protocol,
+            self.resolution,
         )
 
     def provider_config(self) -> dict[str, Any]:
@@ -92,6 +98,8 @@ class AIRuntimeConfig:
             "api_base_url": self.api_base_url,
             "credential_fingerprint": self.credential_fingerprint,
             "account_identity": self.account_identity,
+            "image_api_protocol": self.image_api_protocol,
+            "resolution": self.resolution,
             "source": self.source_summary,
         }
 
@@ -105,6 +113,8 @@ def resolve_user_ai_runtime(capability: str, user):
     runtime = AIRuntimeConfig.from_resolved(capability, resolved)
     if not runtime.model:
         raise ValueError(f"No model configured for capability: {capability}")
+    if capability in {"image_generation", "pptx_generation", "editable_pptx_visual", "editable_pptx_element", "export_queue"} and runtime.provider == "codex":
+        raise ValueError("This capability requires an API key or enterprise proxy; Codex subscription login is not supported.")
     if runtime.provider in {"qwen", "doubao", "deepseek", "glm", "siliconflow", "sensenova", "minimax", "kimi", "lazyllm"}:
         provider_source = runtime.source_summary.get("provider")
         credential_source = runtime.source_summary.get("credential")
@@ -116,3 +126,50 @@ def resolve_user_ai_runtime(capability: str, user):
         from services.ai_service_manager import get_ai_service
         return runtime, get_ai_service()
     return runtime, get_runtime_ai_service(runtime)
+
+
+def resolve_user_image_ai_runtime(user):
+    """Build an AIService with independently resolved prompt-text and image providers."""
+    from services.ai_service import AIService
+    from services.ai_service_manager import (
+        get_ai_service,
+        get_runtime_image_provider,
+        get_runtime_text_provider,
+    )
+    from services.settings_resolver import resolve_capability_runtime_config
+
+    text_resolved = resolve_capability_runtime_config("description", user)
+    image_resolved = resolve_capability_runtime_config("image_generation", user)
+    text_runtime = AIRuntimeConfig.from_resolved("description", text_resolved)
+    image_runtime = AIRuntimeConfig.from_resolved("image_generation", image_resolved)
+    if image_runtime.provider == "codex":
+        raise ValueError("Image generation requires an API key or enterprise proxy; Codex subscription login is not supported.")
+
+    lazy_providers = {"qwen", "doubao", "deepseek", "glm", "siliconflow", "sensenova", "minimax", "kimi", "lazyllm"}
+    legacy_service = None
+
+    def legacy_provider(runtime, attribute):
+        nonlocal legacy_service
+        if runtime.provider not in lazy_providers:
+            return None
+        if "personal" in {
+            runtime.source_summary.get("provider"),
+            runtime.source_summary.get("credential"),
+        }:
+            raise ValueError(
+                "LazyLLM personal runtime isolation is not available yet; "
+                "switch this capability to the global configuration or an isolated API provider."
+            )
+        legacy_service = legacy_service or get_ai_service()
+        return getattr(legacy_service, attribute)
+
+    text_provider = legacy_provider(text_runtime, "text_provider") or get_runtime_text_provider(text_runtime)
+    image_provider = legacy_provider(image_runtime, "image_provider") or get_runtime_image_provider(image_runtime)
+    service = AIService(
+        text_provider=text_provider,
+        image_provider=image_provider,
+        initialize_missing_providers=False,
+    )
+    service.text_model = text_runtime.model
+    service.image_model = image_runtime.model
+    return {"prompt": text_runtime, "image": image_runtime}, service

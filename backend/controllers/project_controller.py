@@ -19,7 +19,7 @@ from werkzeug.utils import secure_filename
 from models import db, Project, Page, Task, ReferenceFile
 from services import ProjectContext, FileService
 from services.ai_service_manager import get_ai_service
-from services.ai_runtime import resolve_user_ai_runtime
+from services.ai_runtime import resolve_user_ai_runtime, resolve_user_image_ai_runtime
 from services.task_manager import (
     task_manager,
     generate_descriptions_task,
@@ -1064,6 +1064,7 @@ def generate_images(project_id):
         max_workers = data.get('max_workers', current_app.config.get('MAX_IMAGE_WORKERS', 8))
         use_template = data.get('use_template', True)
         language = data.get('language', current_app.config.get('OUTPUT_LANGUAGE', 'zh'))
+        runtimes, ai_service = resolve_user_image_ai_runtime(get_current_user())
         
         # Create task
         task = Task(
@@ -1074,13 +1075,14 @@ def generate_images(project_id):
         task.set_progress({
             'total': len(pages),
             'completed': 0,
-            'failed': 0
+            'failed': 0,
+            'config_source': {
+                key: runtime.public_summary() for key, runtime in runtimes.items()
+            },
         })
         
         db.session.add(task)
         db.session.commit()
-        
-        ai_service = get_ai_service()
         
         # 合并额外要求和风格描述
         combined_requirements = project.extra_requirements or ""

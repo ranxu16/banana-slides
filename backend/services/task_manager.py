@@ -418,11 +418,13 @@ def generate_descriptions_task(task_id: str, project_id: str, ai_service,
                 page.status = 'GENERATING_DESCRIPTION'
 
             # Initialize progress
-            task.set_progress({
+            progress = task.get_progress()
+            progress.update({
                 "total": len(pages),
                 "completed": 0,
-                "failed": 0
+                "failed": 0,
             })
+            task.set_progress(progress)
             db.session.commit()
 
             # Generate descriptions in parallel
@@ -573,11 +575,13 @@ def generate_images_task(task_id: str, project_id: str, ai_service, file_service
             # 这样可以确保即使用户在上传新模板后立即生成，也能使用最新模板
             
             # Initialize progress
-            task.set_progress({
+            progress = task.get_progress()
+            progress.update({
                 "total": len(pages),
                 "completed": 0,
-                "failed": 0
+                "failed": 0,
             })
+            task.set_progress(progress)
             db.session.commit()
             
             # Generate images in parallel
@@ -885,11 +889,9 @@ def generate_single_page_image_task(task_id: str, project_id: str, page_id: str,
             # Mark task as completed
             task.status = 'COMPLETED'
             task.completed_at = datetime.utcnow()
-            task.set_progress({
-                "total": 1,
-                "completed": 1,
-                "failed": 0
-            })
+            progress = task.get_progress()
+            progress.update({"total": 1, "completed": 1, "failed": 0})
+            task.set_progress(progress)
             db.session.commit()
             
             logger.info(f"✅ Task {task_id} COMPLETED - Page {page_id} image generated")
@@ -991,11 +993,9 @@ def edit_page_image_task(task_id: str, project_id: str, page_id: str,
             # Mark task as completed
             task.status = 'COMPLETED'
             task.completed_at = datetime.utcnow()
-            task.set_progress({
-                "total": 1,
-                "completed": 1,
-                "failed": 0
-            })
+            progress = task.get_progress()
+            progress.update({"total": 1, "completed": 1, "failed": 0})
+            task.set_progress(progress)
             db.session.commit()
             
             logger.info(f"✅ Task {task_id} COMPLETED - Page {page_id} image edited")

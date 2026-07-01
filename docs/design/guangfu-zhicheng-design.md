@@ -807,6 +807,7 @@ ui-guangfu-dashboard-redesign
 - 可编辑 PPTX 已形成“GPT 视觉结构分析 -> `gpt-image-2` 独立元素生成 -> PPTX 拼装”的流水线骨架。
 - 文本模型、图片识别、图片生成三类服务测试已接入 effective config，未保存表单值作为最高优先级临时覆盖，并记录非敏感配置来源。
 - 大纲生成、页面描述和文本自然语言修改的主要同步、流式与后台任务入口已接入请求级 `AIRuntimeConfig`。
+- 批量图片生成、单页图片生成和图片编辑已接入“文本 prompt runtime + 图片 runtime”组合配置，并记录双来源摘要。
 
 部分完成：
 
@@ -1297,3 +1298,27 @@ ui-guangfu-dashboard-redesign
 - 验证：提交前 `git diff --cached --check` 通过；完整 unit 回归结果为 `411 passed / 5 skipped`。
 - 遗留：图片/视觉 runtime、可编辑 PPTX 与导出队列接入、项目覆盖、个人密钥加密、用户级 OAuth、个人 LazyLLM 隔离仍未完成。
 - 下一步：开始图片生成与视觉理解 runtime；先为显式图片/Caption Provider 工厂和隔离缓存补测试，再接业务入口。
+
+### 2026-07-01 20:00 - Caption/Image runtime 工厂与隔离缓存底座完成
+
+- 范围：`backend/services/ai_runtime.py`、`backend/services/ai_providers/__init__.py`、`backend/services/ai_service_manager.py`、`backend/services/settings_resolver.py`、`backend/tests/unit/test_ai_runtime_isolation.py`、`docs/design/guangfu-zhicheng-design.md`。
+- 动作：从全局工厂中抽出显式 `create_caption_provider` 和 `create_image_provider`；新增 runtime Caption/Image Provider 缓存；将 OpenAI 图片协议和分辨率加入 `AIRuntimeConfig` 与缓存键；resolver 为图片能力返回协议与全局分辨率。
+- 结果：视觉理解和图片生成 Provider 可以使用请求级显式配置构造，不修改全局 `app.config`；相同模型、不同用户密钥不会复用；同一图片模型但不同 `images/chat` 协议或分辨率也不会复用错误 Provider。
+- 兼容性：原 `get_caption_provider`、`get_image_provider` 继续从全局配置解析并委托给显式工厂；OpenAI 图片代理兼容、视觉结构分析现有行为保持通过。
+- 计划状态：Caption/Image runtime 底座完成；进行中组合文本 prompt runtime 与图片 runtime，并接入图片生成/编辑任务。
+- 验证：`python3 -m py_compile` 覆盖 runtime、Provider 工厂、manager、resolver 和测试并通过；`uv run --python 3.13 pytest backend/tests/unit/test_ai_runtime_isolation.py backend/tests/unit/test_openai_image_proxy_compat.py backend/tests/unit/test_visual_structure_analysis.py backend/tests/unit/test_api_settings_provider.py -q` 通过，44 tests passed。
+- 遗留：图片业务控制器尚未切换；任务进度尚未保存文本 prompt 与图片 Provider 的双来源摘要；可编辑 PPTX 仍使用全局 AIService。
+- 下一步：新增组合 runtime helper，接入批量图片生成、单页图片生成和图片编辑，并确保后台任务更新进度时不覆盖 `config_source`。
+
+### 2026-07-01 20:25 - 图片生成与编辑组合 runtime 第一片完成
+
+- 范围：`backend/services/ai_runtime.py`、`backend/controllers/project_controller.py`、`backend/controllers/page_controller.py`、`backend/services/task_manager.py`、`backend/tests/unit/test_ai_runtime_isolation.py`、`backend/tests/unit/test_api_project.py`、`docs/design/guangfu-zhicheng-design.md`。
+- 动作：新增 `resolve_user_image_ai_runtime`，分别解析页面 prompt 的 `description` 文本能力和 `image_generation` 图片能力，再组合成一个仅含对应 Provider 的 AIService；接入批量图片生成、单页图片生成和图片编辑；任务创建时保存 `prompt/image` 双 runtime 公开摘要；后台任务更新进度和完成状态时合并原 progress，保留 `config_source`。
+- 结果：个人文本配置负责图片 prompt，个人图片 API 配置负责 `gpt-image-2` 等图片生成/编辑，两者可以使用不同 Provider、模型、Base 和密钥；图片能力选择 Codex 订阅时明确拒绝并提示必须 API/企业代理；runtime 解析在任务落库前完成，不产生孤立 PENDING 任务。
+- LazyLLM 处理：全局 LazyLLM 继续复用旧全局 AIService 对应 Provider；个人 LazyLLM 仍因无法安全隔离而明确拒绝，不会借用其他用户或全局密钥。
+- 测试修正：单页图片并发测试原 mock 旧 `get_ai_service`，已改为 mock组合 runtime，保留“至少五个任务可并发处理、不退回四任务上限”的原验收。
+- 计划状态：图片生成/编辑业务第一片及完整 unit 回归完成；待阶段提交；视觉理解与可编辑 PPTX 仍未接 runtime。
+- 验证：`python3 -m py_compile` 覆盖 runtime、项目/页面控制器和 task manager 并通过；`uv run --python 3.13 pytest backend/tests/unit/test_ai_runtime_isolation.py backend/tests/unit/test_api_project.py backend/tests/unit/test_task_manager_image_prompt_fields.py backend/tests/unit/test_openai_image_proxy_compat.py backend/tests/unit/test_visual_structure_analysis.py -q` 通过，60 tests passed；`git diff --check` 通过。
+- 完整回归：`uv run --python 3.13 pytest backend/tests/unit -q` 通过，`415 passed / 5 skipped`，覆盖旧图片代理、LazyLLM、OAuth、可编辑 PPTX、任务队列和 runtime 新增测试。
+- 遗留：可编辑 PPTX 视觉拆层仍从全局 AIService 获取 Caption/Image Provider；普通图片识别入口尚未统一接入 caption runtime；个人 LazyLLM 显式凭据适配未完成。
+- 下一步：阶段提交图片 runtime 第一片，再接可编辑 PPTX 的视觉理解和独立元素生成 runtime。

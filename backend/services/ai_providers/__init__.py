@@ -29,7 +29,8 @@ __all__ = [
     'TextProvider', 'GenAITextProvider', 'OpenAITextProvider', 'AnthropicTextProvider', 'LazyLLMTextProvider', 'CodexTextProvider',
     'ImageProvider', 'GenAIImageProvider', 'OpenAIImageProvider', 'AnthropicImageProvider', 'LazyLLMImageProvider', 'CodexImageProvider',
     'get_text_provider', 'get_image_provider', 'get_provider_format',
-    'get_caption_provider', 'get_image_caption_provider_config', 'create_text_provider', 'LAZYLLM_VENDORS',
+    'get_caption_provider', 'get_image_caption_provider_config',
+    'create_text_provider', 'create_caption_provider', 'create_image_provider', 'LAZYLLM_VENDORS',
 ]
 
 # LazyLLM vendor names (used to distinguish from gemini/openai formats)
@@ -326,11 +327,11 @@ def resolve_caption_model_for_provider(model: str, provider_format: str) -> str:
     return resolved
 
 
-def get_caption_provider(model: str = "gpt-5.5") -> TextProvider:
-    """Factory: return a TextProvider for image caption (multimodal) tasks."""
-    config = _get_model_type_provider_config('image_caption')
+def create_caption_provider(config: Dict[str, Any], model: str = "gpt-5.5") -> TextProvider:
+    """Create an image-caption provider from an explicit runtime config."""
     fmt = config['format']
-    model = resolve_caption_model_for_provider(model, fmt)
+    if fmt in {'openai', 'codex'} and not _is_openai_vision_model_name(model):
+        model = 'gpt-4o'
 
     if fmt == 'anthropic':
         logger.info("Caption provider: Anthropic, model=%s", model)
@@ -354,6 +355,13 @@ def get_caption_provider(model: str = "gpt-5.5") -> TextProvider:
     else:
         logger.info("Caption provider: Gemini, model=%s", model)
         return GenAITextProvider(api_key=config['api_key'], api_base=config['api_base'], model=model)
+
+
+def get_caption_provider(model: str = "gpt-5.5") -> TextProvider:
+    """Factory: return the globally configured image-caption provider."""
+    config = _get_model_type_provider_config('image_caption')
+    model = resolve_caption_model_for_provider(model, config['format'])
+    return create_caption_provider(config, model=model)
 
 
 def create_text_provider(config: Dict[str, Any], model: str = "gpt-5.5") -> TextProvider:
@@ -390,7 +398,12 @@ def get_text_provider(model: str = "gpt-5.5") -> TextProvider:
     return create_text_provider(_get_model_type_provider_config('text'), model=model)
 
 
-def get_image_provider(model: str = "gpt-image-2") -> ImageProvider:
+def create_image_provider(
+    config: Dict[str, Any],
+    model: str = "gpt-image-2",
+    image_api_protocol: str = "auto",
+    resolution: str = "2K",
+) -> ImageProvider:
     """Factory: return the appropriate image-generation provider.
 
     Note: OpenAI format does NOT support 4K resolution — only 1K is available.
@@ -399,7 +412,6 @@ def get_image_provider(model: str = "gpt-image-2") -> ImageProvider:
     Note: Anthropic format doesn't natively support image generation yet.
     This is intended for use with third-party Anthropic-compatible endpoints.
     """
-    config = _get_model_type_provider_config('image')
     fmt = config['format']
 
     if fmt == 'anthropic':
@@ -409,7 +421,6 @@ def get_image_provider(model: str = "gpt-image-2") -> ImageProvider:
     elif fmt == 'openai':
         logger.info("Image provider: OpenAI, model=%s", model)
         logger.warning("OpenAI format only supports 1K resolution, 4K is not available")
-        image_api_protocol = _resolve_setting('OPENAI_IMAGE_API_PROTOCOL') or 'auto'
         return OpenAIImageProvider(api_key=config['api_key'], api_base=config['api_base'], model=model, image_api_protocol=image_api_protocol)
     elif fmt == 'vertex':
         logger.info("Image provider: Vertex AI, model=%s, project=%s", model, config['project_id'])
@@ -422,10 +433,19 @@ def get_image_provider(model: str = "gpt-image-2") -> ImageProvider:
         logger.info("Image provider: LazyLLM, model=%s, source=%s", model, source)
         return LazyLLMImageProvider(source=source, model=model)
     elif fmt == 'codex':
-        resolution = _resolve_setting('DEFAULT_RESOLUTION', '2K') or '2K'
         logger.info("Image provider: Codex (OAuth), model=%s, resolution=%s", model, resolution)
         return CodexImageProvider(api_key=config['api_key'], model=model, resolution=resolution)
     else:
         # gemini (default)
         logger.info("Image provider: Gemini, model=%s", model)
         return GenAIImageProvider(api_key=config['api_key'], api_base=config['api_base'], model=model)
+
+
+def get_image_provider(model: str = "gpt-image-2") -> ImageProvider:
+    """Factory: return the globally configured image-generation provider."""
+    return create_image_provider(
+        _get_model_type_provider_config('image'),
+        model=model,
+        image_api_protocol=_resolve_setting('OPENAI_IMAGE_API_PROTOCOL') or 'auto',
+        resolution=_resolve_setting('DEFAULT_RESOLUTION', '2K') or '2K',
+    )

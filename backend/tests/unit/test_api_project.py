@@ -189,8 +189,15 @@ class TestResourceConcurrency:
                     page_obj.status = 'COMPLETED'
                 return (f"generated/{_page_id}.png", 1)
 
+            runtime = type('Runtime', (), {'public_summary': lambda self: {'provider': 'test'}})()
+            runtime_service = SlowAIService()
+
             with (
-                patch.object(page_controller_module, 'get_ai_service', return_value=SlowAIService()),
+                patch.object(
+                    page_controller_module,
+                    'resolve_user_image_ai_runtime',
+                    return_value=({'prompt': runtime, 'image': runtime}, runtime_service),
+                ),
                 patch.object(task_manager_module, 'save_image_with_version', side_effect=fake_save_image_with_version),
             ):
                 for page in pages:

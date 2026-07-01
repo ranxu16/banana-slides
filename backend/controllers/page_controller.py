@@ -8,7 +8,7 @@ from utils import success_response, error_response, not_found, bad_request
 from utils.auth import require_auth, get_current_user
 from services import FileService, ProjectContext
 from services.ai_service_manager import get_ai_service
-from services.ai_runtime import resolve_user_ai_runtime
+from services.ai_runtime import resolve_user_ai_runtime, resolve_user_image_ai_runtime
 from services.task_manager import (
     task_manager,
     generate_single_page_image_task,
@@ -423,8 +423,7 @@ def generate_page_image(project_id, page_id):
                 "pages": current_part_pages
             })
         
-        # Initialize services
-        ai_service = get_ai_service()
+        runtimes, ai_service = resolve_user_image_ai_runtime(get_current_user())
         
         file_service = FileService(current_app.config['UPLOAD_FOLDER'])
         
@@ -480,7 +479,10 @@ def generate_page_image(project_id, page_id):
         task.set_progress({
             'total': 1,
             'completed': 0,
-            'failed': 0
+            'failed': 0,
+            'config_source': {
+                key: runtime.public_summary() for key, runtime in runtimes.items()
+            },
         })
         db.session.add(task)
         db.session.commit()
@@ -549,8 +551,7 @@ def edit_page_image(project_id, page_id):
         if not page.generated_image_path:
             return bad_request("Page must have generated image first")
         
-        # Initialize services
-        ai_service = get_ai_service()
+        runtimes, ai_service = resolve_user_image_ai_runtime(get_current_user())
         
         file_service = FileService(current_app.config['UPLOAD_FOLDER'])
         
@@ -651,7 +652,10 @@ def edit_page_image(project_id, page_id):
         task.set_progress({
             'total': 1,
             'completed': 0,
-            'failed': 0
+            'failed': 0,
+            'config_source': {
+                key: runtime.public_summary() for key, runtime in runtimes.items()
+            },
         })
         db.session.add(task)
         db.session.commit()

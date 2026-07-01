@@ -213,6 +213,7 @@ def resolve_capability_runtime_config(capability: str, user=None) -> dict[str, A
             "openai_image_api_protocol", global_settings, personal_settings, use_personal
         )
         runtime["openai_image_api_protocol"] = protocol or "auto"
+        runtime["image_resolution"] = global_dict.get("image_resolution") or "2K"
     return {key: value for key, value in runtime.items() if value is not None}
 
 

@@ -25,6 +25,8 @@ from flask import current_app, has_app_context
 from .ai_service import AIService
 from .ai_providers import (
     LAZYLLM_VENDORS,
+    create_caption_provider,
+    create_image_provider,
     create_text_provider,
     get_text_provider,
     get_image_provider,
@@ -45,6 +47,8 @@ _text_provider_cache: dict = {}
 _image_provider_cache: dict = {}
 _caption_provider_cache: dict = {}
 _runtime_text_provider_cache: dict = {}
+_runtime_caption_provider_cache: dict = {}
+_runtime_image_provider_cache: dict = {}
 _cache_lock = Lock()
 
 
@@ -106,6 +110,40 @@ def get_runtime_text_provider(runtime: AIRuntimeConfig) -> TextProvider:
                 model=runtime.model,
             )
         return _runtime_text_provider_cache[runtime.cache_key]
+
+
+def _reject_unisolated_lazyllm(runtime: AIRuntimeConfig) -> None:
+    if runtime.provider in ({"lazyllm"} | LAZYLLM_VENDORS):
+        raise ValueError(
+            "LazyLLM personal runtime isolation is not available yet; "
+            "use the global configuration for this capability."
+        )
+
+
+def get_runtime_caption_provider(runtime: AIRuntimeConfig) -> TextProvider:
+    """Return a vision provider isolated by endpoint, credential and account."""
+    _reject_unisolated_lazyllm(runtime)
+    with _cache_lock:
+        if runtime.cache_key not in _runtime_caption_provider_cache:
+            _runtime_caption_provider_cache[runtime.cache_key] = create_caption_provider(
+                runtime.provider_config(),
+                model=runtime.model,
+            )
+        return _runtime_caption_provider_cache[runtime.cache_key]
+
+
+def get_runtime_image_provider(runtime: AIRuntimeConfig) -> ImageProvider:
+    """Return an image provider isolated by endpoint, credential and account."""
+    _reject_unisolated_lazyllm(runtime)
+    with _cache_lock:
+        if runtime.cache_key not in _runtime_image_provider_cache:
+            _runtime_image_provider_cache[runtime.cache_key] = create_image_provider(
+                runtime.provider_config(),
+                model=runtime.model,
+                image_api_protocol=runtime.image_api_protocol,
+                resolution=runtime.resolution,
+            )
+        return _runtime_image_provider_cache[runtime.cache_key]
 
 
 def get_runtime_ai_service(runtime: AIRuntimeConfig) -> AIService:
@@ -205,6 +243,8 @@ def clear_ai_service_cache():
             _image_provider_cache.clear()
             _caption_provider_cache.clear()
             _runtime_text_provider_cache.clear()
+            _runtime_caption_provider_cache.clear()
+            _runtime_image_provider_cache.clear()
             logger.info("Provider cache cleared")
 
 
@@ -221,5 +261,11 @@ def get_provider_cache_info() -> dict:
             "image_providers": list(_image_provider_cache.keys()),
             "caption_providers": list(_caption_provider_cache.keys()),
             "runtime_text_providers": len(_runtime_text_provider_cache),
-            "total_cached": len(_text_provider_cache) + len(_image_provider_cache) + len(_caption_provider_cache) + len(_runtime_text_provider_cache)
+            "runtime_caption_providers": len(_runtime_caption_provider_cache),
+            "runtime_image_providers": len(_runtime_image_provider_cache),
+            "total_cached": (
+                len(_text_provider_cache) + len(_image_provider_cache) + len(_caption_provider_cache)
+                + len(_runtime_text_provider_cache) + len(_runtime_caption_provider_cache)
+                + len(_runtime_image_provider_cache)
+            )
         }
