@@ -1377,3 +1377,13 @@ ui-guangfu-dashboard-redesign
 - 验证：`uv run --python 3.13 pytest backend/tests/unit/test_personal_settings_effective_config.py backend/tests/unit/test_ai_runtime_isolation.py -q` 通过，16 tests passed。
 - 遗留：项目字段当前带默认值，无法区分“继承全局”与“项目显式覆盖”；下一步需要先定义可覆盖字段 schema 和来源标记策略，再决定是否需要迁移/新增显式 override 元数据。
 - 下一步：为项目覆盖建立后端 schema/来源摘要：先覆盖已有项目导出字段和画面比例的来源展示，再评估 AI 模型是否需要新增项目级 override 存储。
+
+### 2026-07-01 22:40 - 项目覆盖摘要契约接入
+
+- 范围：`backend/models/project.py`、`backend/tests/unit/test_api_project.py`、`frontend/src/types/index.ts`、`docs/design/guangfu-zhicheng-design.md`。
+- 动作：为项目详情新增 `project_overrides` 摘要，列出当前项目已有的可覆盖字段：画面比例、组件提取方法、背景获取方法、返回半成品、图标主体抠图、视觉结构分析；每个字段包含 label、group、source 和当前 value。前端 `Project` 类型同步补充 `ProjectOverridesSummary`。
+- 结果：配置中心、项目设置弹窗和导出任务排障后续可以读取统一的项目覆盖字段清单，不需要各页面自己猜哪些字段属于项目级覆盖；同时明确 `inheritance_tracking=false`，避免把数据库默认值伪装成“继承全局/显式覆盖”。
+- 计划状态：项目覆盖字段 schema 和 API 契约第一片完成；尚未接入 UI 展示，也尚未加入项目级 AI Provider/模型/API Key 覆盖存储。
+- 验证：`uv run --python 3.13 pytest backend/tests/unit/test_api_project.py::TestProjectGet backend/tests/unit/test_personal_settings_effective_config.py -q` 通过，10 tests passed；`npx eslint src/types/index.ts --ext ts --max-warnings 20` 通过。
+- 遗留：需要决定是否新增项目 override 元数据表/JSON 字段，以支持真正的“继承全局默认/启用项目覆盖”切换；AI 模型项目级覆盖仍需产品层确认后再建字段。
+- 下一步：把 `project_overrides` 接到全局配置中心的“项目覆盖”区和项目设置弹窗，先做只读来源展示，再补恢复全局默认/启用覆盖的真实存储设计。

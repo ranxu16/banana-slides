@@ -69,6 +69,21 @@ class TestProjectGet:
         
         data = assert_success_response(response)
         assert data['data']['project_id'] == project_id
+
+    def test_get_project_includes_project_override_summary(self, client, sample_project):
+        """项目详情返回项目级覆盖项摘要，供配置中心和任务排障展示。"""
+        if not sample_project:
+            pytest.skip("项目创建失败")
+
+        project_id = sample_project['project_id']
+        response = client.get(f'/api/projects/{project_id}')
+
+        data = assert_success_response(response)
+        overrides = data['data']['project_overrides']
+        assert overrides['inheritance_tracking'] is False
+        assert overrides['fields']['image_aspect_ratio']['source'] == 'project_value'
+        assert overrides['fields']['export_extractor_method']['group'] == 'export'
+        assert overrides['fields']['enable_visual_structure_analysis']['label'] == '视觉结构分析'
     
     def test_get_project_not_found(self, client):
         """测试获取不存在的项目"""

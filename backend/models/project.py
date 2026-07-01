@@ -6,6 +6,40 @@ from datetime import datetime
 from . import db
 
 
+PROJECT_OVERRIDE_FIELDS = {
+    'image_aspect_ratio': {
+        'label': '画面比例',
+        'group': 'project',
+        'source': 'project_value',
+    },
+    'export_extractor_method': {
+        'label': '组件提取方法',
+        'group': 'export',
+        'source': 'project_value',
+    },
+    'export_inpaint_method': {
+        'label': '背景获取方法',
+        'group': 'export',
+        'source': 'project_value',
+    },
+    'export_allow_partial': {
+        'label': '返回半成品',
+        'group': 'export',
+        'source': 'project_value',
+    },
+    'enable_icon_subject_extraction': {
+        'label': '图标主体抠图',
+        'group': 'export',
+        'source': 'project_value',
+    },
+    'enable_visual_structure_analysis': {
+        'label': '视觉结构分析',
+        'group': 'export',
+        'source': 'project_value',
+    },
+}
+
+
 class Project(db.Model):
     """
     Project model - represents a PPT project
@@ -78,6 +112,17 @@ class Project(db.Model):
             'status': self.status,
             'created_at': created_at_str,
             'updated_at': updated_at_str,
+        }
+        data['project_overrides'] = {
+            'inheritance_tracking': False,
+            'source_order': ['global', 'personal', 'project_value'],
+            'fields': {
+                field: {
+                    **meta,
+                    'value': data.get(field),
+                }
+                for field, meta in PROJECT_OVERRIDE_FIELDS.items()
+            },
         }
         
         if include_pages:

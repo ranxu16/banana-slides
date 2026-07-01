@@ -69,6 +69,19 @@ export type ExportExtractorMethod = 'mineru' | 'hybrid';
 // 导出设置 - 背景图获取方法
 export type ExportInpaintMethod = 'generative' | 'baidu' | 'hybrid';
 
+export interface ProjectOverrideField {
+  label: string;
+  group: 'project' | 'export' | string;
+  source: 'project_value' | string;
+  value: string | boolean | number | null | undefined;
+}
+
+export interface ProjectOverridesSummary {
+  inheritance_tracking: boolean;
+  source_order: string[];
+  fields: Record<string, ProjectOverrideField>;
+}
+
 // 项目
 export interface Project {
   project_id: string;  // 后端返回 project_id
@@ -91,6 +104,7 @@ export interface Project {
   enable_icon_subject_extraction?: boolean; // 是否对小尺寸图标走百度智能抠图（透明背景）
   enable_visual_structure_analysis?: boolean; // 是否启用 Vision 视觉结构分析（Beta）
   image_aspect_ratio?: string; // 画面比例（如 16:9, 4:3）
+  project_overrides?: ProjectOverridesSummary; // 项目级覆盖项摘要
   status: ProjectStatus;
   pages: Page[];
   created_at: string;
