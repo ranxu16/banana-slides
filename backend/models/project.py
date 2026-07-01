@@ -40,6 +40,14 @@ PROJECT_OVERRIDE_FIELDS = {
     },
 }
 
+EXPORT_OPTION_FIELDS = {
+    'export_extractor_method',
+    'export_inpaint_method',
+    'export_allow_partial',
+    'enable_icon_subject_extraction',
+    'enable_visual_structure_analysis',
+}
+
 
 class Project(db.Model):
     """
@@ -106,6 +114,57 @@ class Project(db.Model):
         fields = self.get_project_override_fields()
         fields.discard(field)
         self.set_project_override_fields(fields)
+
+    def _project_override_values(self):
+        return {
+            'image_aspect_ratio': self.image_aspect_ratio,
+            'export_extractor_method': self.export_extractor_method or 'hybrid',
+            'export_inpaint_method': self.export_inpaint_method or 'hybrid',
+            'export_allow_partial': self.export_allow_partial or False,
+            'enable_icon_subject_extraction': True if self.enable_icon_subject_extraction is None else bool(self.enable_icon_subject_extraction),
+            'enable_visual_structure_analysis': True if self.enable_visual_structure_analysis is None else bool(self.enable_visual_structure_analysis),
+        }
+
+    def get_project_overrides_summary(self, value_overrides=None, source_overrides=None):
+        values = self._project_override_values()
+        values.update(value_overrides or {})
+        explicit_overrides = self.get_project_override_fields()
+        source_overrides = source_overrides or {}
+        return {
+            'inheritance_tracking': True,
+            'source_order': ['global', 'personal', 'project_override', 'request_override'],
+            'fields': {
+                field: {
+                    **meta,
+                    'value': values.get(field),
+                    'source': source_overrides.get(
+                        field,
+                        'project_override' if field in explicit_overrides else 'inherited_or_default',
+                    ),
+                    'explicit': source_overrides.get(field) in {'project_override', 'request_override'}
+                    or field in explicit_overrides,
+                }
+                for field, meta in PROJECT_OVERRIDE_FIELDS.items()
+            },
+        }
+
+    def get_effective_export_options(self, request_overrides=None):
+        request_overrides = request_overrides or {}
+        values = self._project_override_values()
+        explicit_overrides = self.get_project_override_fields()
+        options = {}
+        for field in EXPORT_OPTION_FIELDS:
+            if field in request_overrides:
+                options[field] = {
+                    'value': request_overrides[field],
+                    'source': 'request_override',
+                }
+            else:
+                options[field] = {
+                    'value': values[field],
+                    'source': 'project_override' if field in explicit_overrides else 'inherited_or_default',
+                }
+        return options
     
     def to_dict(self, include_pages=False):
         """Convert to dictionary"""
@@ -140,20 +199,7 @@ class Project(db.Model):
             'created_at': created_at_str,
             'updated_at': updated_at_str,
         }
-        explicit_overrides = self.get_project_override_fields()
-        data['project_overrides'] = {
-            'inheritance_tracking': True,
-            'source_order': ['global', 'personal', 'project_override'],
-            'fields': {
-                field: {
-                    **meta,
-                    'value': data.get(field),
-                    'source': 'project_override' if field in explicit_overrides else 'inherited_or_default',
-                    'explicit': field in explicit_overrides,
-                }
-                for field, meta in PROJECT_OVERRIDE_FIELDS.items()
-            },
-        }
+        data['project_overrides'] = self.get_project_overrides_summary()
         
         if include_pages:
             # pages 现在是列表，不需要 order_by（已在 relationship 中定义）

@@ -469,34 +469,22 @@ def export_editable_pptx(project_id):
             )
 
         # 读取项目的导出设置；请求参数可作为本次导出的最高优先级覆盖。
-        export_extractor_method = project.export_extractor_method or 'hybrid'
-        export_inpaint_method = project.export_inpaint_method or 'hybrid'
-        enable_icon_subject_extraction = (
-            True if project.enable_icon_subject_extraction is None
-            else bool(project.enable_icon_subject_extraction)
+        export_request_overrides = {}
+        if 'enable_visual_structure_analysis' in data:
+            export_request_overrides['enable_visual_structure_analysis'] = bool(data['enable_visual_structure_analysis'])
+        effective_export_options = project.get_effective_export_options(export_request_overrides)
+        project_overrides = project.get_project_overrides_summary(
+            value_overrides={
+                field: option['value'] for field, option in effective_export_options.items()
+            },
+            source_overrides={
+                field: option['source'] for field, option in effective_export_options.items()
+            },
         )
-        enable_visual_structure_analysis = data.get('enable_visual_structure_analysis')
-        visual_structure_source = 'request_override'
-        if enable_visual_structure_analysis is None:
-            enable_visual_structure_analysis = (
-                True if project.enable_visual_structure_analysis is None
-                else bool(project.enable_visual_structure_analysis)
-            )
-            visual_structure_source = (
-                'project_override'
-                if 'enable_visual_structure_analysis' in project.get_project_override_fields()
-                else 'inherited_or_default'
-            )
-        else:
-            enable_visual_structure_analysis = bool(enable_visual_structure_analysis)
-
-        project_overrides = project.to_dict().get('project_overrides')
-        if project_overrides:
-            visual_field = project_overrides.get('fields', {}).get('enable_visual_structure_analysis')
-            if visual_field:
-                visual_field['value'] = enable_visual_structure_analysis
-                visual_field['source'] = visual_structure_source
-                visual_field['explicit'] = visual_structure_source in {'project_override', 'request_override'}
+        export_extractor_method = effective_export_options['export_extractor_method']['value']
+        export_inpaint_method = effective_export_options['export_inpaint_method']['value']
+        enable_icon_subject_extraction = effective_export_options['enable_icon_subject_extraction']['value']
+        enable_visual_structure_analysis = effective_export_options['enable_visual_structure_analysis']['value']
 
         # Create task record
         task = Task(
@@ -509,24 +497,7 @@ def export_editable_pptx(project_id):
                 key: runtime.public_summary() for key, runtime in runtimes.items()
             },
             'project_overrides': project_overrides,
-            'effective_export_options': {
-                'export_extractor_method': {
-                    'value': export_extractor_method,
-                    'source': 'project_override' if 'export_extractor_method' in project.get_project_override_fields() else 'inherited_or_default',
-                },
-                'export_inpaint_method': {
-                    'value': export_inpaint_method,
-                    'source': 'project_override' if 'export_inpaint_method' in project.get_project_override_fields() else 'inherited_or_default',
-                },
-                'enable_icon_subject_extraction': {
-                    'value': enable_icon_subject_extraction,
-                    'source': 'project_override' if 'enable_icon_subject_extraction' in project.get_project_override_fields() else 'inherited_or_default',
-                },
-                'enable_visual_structure_analysis': {
-                    'value': enable_visual_structure_analysis,
-                    'source': visual_structure_source,
-                },
-            },
+            'effective_export_options': effective_export_options,
         })
         db.session.add(task)
         db.session.commit()

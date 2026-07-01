@@ -1447,3 +1447,13 @@ ui-guangfu-dashboard-redesign
 - 验证：`uv run --python 3.13 pytest backend/tests/unit/test_export_editable_pptx_task.py -k "export_route_creates_pending_task_and_returns_task_id or export_route_records_request_override_for_visual_structure" -q` 通过，2 tests passed；`npm run guard:brand` 通过；`npx eslint src/store/useExportTasksStore.ts src/pages/ExportTasks.tsx src/components/shared/ExportTasksPanel.tsx --ext ts,tsx --max-warnings 20` 通过。
 - 遗留：`effective_export_options` 目前只在可编辑 PPTX 导出任务中记录；普通 PPTX/PDF/视频导出仍需统一；清除项目覆盖仍只清元数据，不回填字段值。
 - 下一步：抽出通用项目导出配置摘要 helper，复用到视频/其他异步导出；随后再评估 AI 模型项目级覆盖字段设计。
+
+### 2026-07-02 01:00 - 项目导出配置来源 helper 抽取
+
+- 范围：`backend/models/project.py`、`backend/controllers/export_controller.py`、`docs/design/guangfu-zhicheng-design.md`。
+- 动作：在 Project 模型中新增 `get_project_overrides_summary()` 和 `get_effective_export_options()`，统一计算项目覆盖字段、显式覆盖状态、请求覆盖来源和有效导出参数；可编辑 PPTX 导出路由改为使用 helper，不再手写每个字段的来源判断。
+- 结果：导出相关项目覆盖来源计算有了单一入口，后续视频/其他异步导出可以复用同一套 `inherited_or_default / project_override / request_override` 规则。
+- 计划状态：可编辑 PPTX 已使用通用 helper；普通 PPTX/PDF/视频导出尚未统一写入 `effective_export_options`。
+- 验证：`uv run --python 3.13 pytest backend/tests/unit/test_export_editable_pptx_task.py -k "export_route_creates_pending_task_and_returns_task_id or export_route_records_request_override_for_visual_structure" -q` 通过，2 tests passed；`uv run --python 3.13 pytest backend/tests/unit/test_api_project.py::TestProjectGet -q` 通过，5 tests passed。
+- 遗留：helper 目前覆盖项目已有导出字段和画面比例；AI 模型项目级覆盖仍无字段定义，不应强行进入 runtime resolver。
+- 下一步：复用 helper 到视频导出任务并记录项目覆盖来源；随后统一普通导出任务或进入 AI 模型项目级覆盖字段设计。
