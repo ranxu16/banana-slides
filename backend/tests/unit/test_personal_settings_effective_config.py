@@ -90,6 +90,28 @@ def test_runtime_config_uses_personal_capability_settings(app, client):
         assert runtime['_effective_source']['credential'] == 'personal'
 
 
+def test_image_runtime_config_uses_global_resolution_without_undefined_state(app, client):
+    client.put('/api/settings', json={
+        'ai_provider_format': 'openai',
+        'image_model_source': 'openai',
+        'image_model': 'gpt-image-2',
+        'image_api_key': 'global-image-key',
+        'image_resolution': '4K',
+    })
+
+    with app.app_context():
+        from models import User
+        from services.settings_resolver import resolve_capability_runtime_config
+
+        user = User.query.filter_by(username='test-admin').first()
+        runtime = resolve_capability_runtime_config('image_generation', user)
+
+        assert runtime['image_model'] == 'gpt-image-2'
+        assert runtime['image_api_key'] == 'global-image-key'
+        assert runtime['image_resolution'] == '4K'
+        assert runtime['_effective_source']['credential'] == 'global'
+
+
 def test_service_test_uses_effective_config_then_unsaved_override(client):
     client.put('/api/auth/personal-settings', json={
         'ai_provider_format': 'openai',

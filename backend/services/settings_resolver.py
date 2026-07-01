@@ -148,6 +148,7 @@ def resolve_capability_runtime_config(capability: str, user=None) -> dict[str, A
         raise ValueError(f"Unknown capability: {capability}")
 
     global_settings = Settings.get_settings()
+    global_dict = global_settings.to_dict()
     personal_settings = getattr(user, "settings", None) if user else None
     use_personal, use_global_default = _capability_use_personal(capability, personal_settings)
 

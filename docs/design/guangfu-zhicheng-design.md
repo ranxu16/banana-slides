@@ -1367,3 +1367,13 @@ ui-guangfu-dashboard-redesign
 - 构建说明：`npm run build:check` 中品牌守卫通过，但全量 `tsc` 被既有类型债务阻塞，包含 `AccessCodeGuard.tsx`、`MaterialCenterModal.tsx`、`Landing.tsx`、`Settings.tsx`、`useProjectStore.ts` 和若干测试文件的历史错误；本次触达文件 lint 已通过。
 - 遗留：普通图片识别独立入口、项目覆盖 resolver、个人密钥加密、用户级 OAuth、个人 LazyLLM 隔离、可编辑 PPTX 原图视觉比对自动校正仍未完成；全量前端 TS 债务需要单独清理。
 - 下一步：开始项目覆盖 resolver 层，先盘点 Project 模型已有可覆盖字段，再实现 `项目 > 个人 > 全局 > 系统默认` 的后端合并与来源标记。
+
+### 2026-07-01 22:20 - 项目覆盖前置 resolver 隐患修复
+
+- 范围：`backend/services/settings_resolver.py`、`backend/tests/unit/test_personal_settings_effective_config.py`、`docs/design/guangfu-zhicheng-design.md`。
+- 动作：盘点 Project 模型现有覆盖字段，确认当前只有画面比例、导出策略、背景修复、返回半成品、图标抠图和视觉结构分析等项目字段；AI Provider/模型/API Key 尚无项目级字段。修复 `resolve_capability_runtime_config` 在图片能力中读取 `image_resolution` 时引用未定义 `global_dict` 的问题，并补图片 runtime 解析测试。
+- 结果：图片生成与可编辑 PPTX 独立元素能力解析 runtime 时能稳定带出全局 `image_resolution`，不会在进入项目覆盖改造前因未定义变量中断。
+- 计划状态：项目覆盖层已完成字段盘点和前置 bug 修复；真正的 `项目 > 个人 > 全局 > 系统默认` 合并还未实现。
+- 验证：`uv run --python 3.13 pytest backend/tests/unit/test_personal_settings_effective_config.py backend/tests/unit/test_ai_runtime_isolation.py -q` 通过，16 tests passed。
+- 遗留：项目字段当前带默认值，无法区分“继承全局”与“项目显式覆盖”；下一步需要先定义可覆盖字段 schema 和来源标记策略，再决定是否需要迁移/新增显式 override 元数据。
+- 下一步：为项目覆盖建立后端 schema/来源摘要：先覆盖已有项目导出字段和画面比例的来源展示，再评估 AI 模型是否需要新增项目级 override 存储。
