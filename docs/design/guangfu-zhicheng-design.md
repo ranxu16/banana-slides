@@ -900,3 +900,21 @@ ui-guangfu-dashboard-redesign
 - 验证：`npm run guard:brand` 通过；`npm run test:run -- src/tests/branding-workbench-regression.test.ts` 通过，2 tests passed；`npm run build` 通过；`git diff --check -- frontend/src/App.tsx frontend/src/pages/Templates.tsx frontend/src/pages/Materials.tsx docs/design/guangfu-zhicheng-design.md` 通过；`rg` 检查 `App.tsx` 与新增页面中不再包含模板/素材占位文案。
 - 遗留：模板“使用/设为默认”、最近使用、场景标签仍需后端字段与跨页面动作支持；素材“使用”需要结合编辑页上下文选择器接入；团队可见范围还没有后端字段，目前仅能区分全局和项目素材。
 - 下一步：阶段性提交模板与素材中心前端改造；随后可继续编辑/预览页外壳统一，或回到后端可编辑 PPTX 流水线与 OpenAI 默认配置 checkpoint。
+
+### 2026-07-01 11:15 - 编辑/预览页外壳统一启动
+
+- 范围：`docs/design/mockups/editor-preview-shell.md`、`frontend/src/pages/OutlineEditor.tsx`、`frontend/src/pages/DetailEditor.tsx`、`frontend/src/pages/SlidePreview.tsx`。
+- 动作：读取编辑/预览页外壳设计稿，检查三页当前顶部栏、返回路径、导出任务入口和 AppShell 内重复外壳。
+- 结果：三个项目页已经由 `AppShell` 路由包裹，但页面内部仍保留 `min-h-screen/h-screen` 全屏容器、独立 header、旧品牌图标/名称和旧返回路径；预览页已有导出任务面板，可继续复用。
+- 验证：通过 `sed` 和 `rg` 定位三个页面顶部栏与主内容容器；确认本步骤只改外壳和导航入口，不改生成、保存、导出、轮询核心函数。
+- 遗留：第一轮先统一企业后台外壳和项目阶段工具条，暂不重排编辑区核心布局；后续再做编辑区密度和移动端操作抽屉。
+- 下一步：移除三页旧品牌/全屏外壳，补充“工作台/我的项目/全局配置/导出任务”入口，并保持可编辑 PPTX 导出入口不丢。
+
+### 2026-07-01 11:35 - 编辑/预览页外壳首轮统一完成
+
+- 范围：`frontend/src/pages/OutlineEditor.tsx`、`frontend/src/pages/DetailEditor.tsx`、`frontend/src/pages/SlidePreview.tsx`、`docs/design/guangfu-zhicheng-design.md`。
+- 动作：将大纲页、描述页、预览页的旧全屏外壳改为 AppShell 内的有边界工作区；移除三页顶部栏中的旧品牌图标/名称；改为项目阶段标签、项目标题、页数/完成度说明；新增工作台、我的项目、全局配置等统一入口；预览页保留原导出菜单和可编辑 PPTX 导出入口，并新增跳转全局导出任务中心入口；将预览画布背景从 banana 渐变改为中性灰白工作区，并替换未生成图片空状态的旧品牌符号。
+- 结果：三个项目编辑/预览页不再在 AppShell 内重复展示旧品牌页头；返回路径、项目阶段、全局配置和导出任务入口更统一；核心大纲生成、描述生成、图片生成、模板/素材、导出菜单和导出任务面板逻辑未改。
+- 验证：`npm run guard:brand` 通过；`npm run test:run -- src/tests/branding-workbench-regression.test.ts` 通过，2 tests passed；`npm run build` 通过；`git diff --check -- frontend/src/pages/OutlineEditor.tsx frontend/src/pages/DetailEditor.tsx frontend/src/pages/SlidePreview.tsx docs/design/guangfu-zhicheng-design.md` 通过；`rg` 检查三个页面不再包含旧品牌符号、旧 `home.title` 顶栏引用或旧全屏 banana 渐变背景。
+- 遗留：编辑区内部的卡片、工具条密度和移动端按钮折叠仍沿用旧实现；预览页局部弹窗/按钮仍有旧样式细节，后续可继续做编辑区工作流优化；本次未做浏览器截图验收。
+- 下一步：阶段性提交本次编辑/预览页外壳统一；随后可切回后端可编辑 PPTX 稳定流水线，或继续细化编辑页移动端/密度。

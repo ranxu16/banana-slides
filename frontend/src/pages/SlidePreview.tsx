@@ -1547,18 +1547,25 @@ export const SlidePreview: React.FC = () => {
   ].filter(Boolean).join(' / ');
 
   return (
-    <div className="h-screen bg-gray-50 dark:bg-background-primary flex flex-col overflow-hidden">
-      {/* 顶栏 */}
-      <header className="h-14 md:h-16 bg-white dark:bg-background-secondary shadow-sm dark:shadow-background-primary/30 border-b border-gray-200 dark:border-border-primary flex items-center justify-between px-3 md:px-6 flex-shrink-0">
+    <div className="flex h-[calc(100vh-8rem)] min-h-[640px] flex-col overflow-hidden rounded-md border border-gray-200 bg-white dark:bg-background-primary">
+      {/* 项目阶段工具栏 */}
+      <header className="h-14 md:h-16 bg-white dark:bg-background-secondary border-b border-gray-200 dark:border-border-primary flex items-center justify-between px-3 md:px-5 flex-shrink-0">
         <div className="flex items-center gap-2 md:gap-4 min-w-0 flex-1">
           <Button
             variant="ghost"
             size="sm"
-            icon={<Home size={16} className="md:w-[18px] md:h-[18px]" />}
             onClick={() => navigate('/')}
-            className="hidden sm:inline-flex flex-shrink-0"
+            className="hidden lg:inline-flex flex-shrink-0"
             >
-              <span className="hidden md:inline">{t('nav.home')}</span>
+              工作台
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => navigate('/history')}
+              className="hidden lg:inline-flex flex-shrink-0"
+            >
+              我的项目
             </Button>
             <Button
               variant="ghost"
@@ -1575,14 +1582,27 @@ export const SlidePreview: React.FC = () => {
             >
               <span className="hidden sm:inline">{t('common.back')}</span>
             </Button>
-            <div className="flex items-center gap-1.5 md:gap-2 min-w-0">
-              <span className="text-xl md:text-2xl">🍌</span>
-              <span className="text-base md:text-xl font-bold truncate">{t('home.title')}</span>
+            <div className="min-w-0">
+              <div className="flex items-center gap-2">
+                <span className="rounded-md bg-emerald-50 px-2 py-1 text-xs font-semibold text-emerald-700">预览</span>
+                <span className="text-sm md:text-base font-semibold text-gray-900 dark:text-foreground-primary truncate">
+                  {currentProject.project_title || t('preview.title')}
+                </span>
+              </div>
+              <div className="mt-0.5 hidden text-xs text-gray-500 md:block">
+                {t('preview.pageCount', { count: String(currentProject.pages.length) })} · 图片生成与导出
+              </div>
             </div>
-            <span className="text-gray-400 hidden md:inline">|</span>
-            <span className="text-sm md:text-lg font-semibold truncate hidden sm:inline">{t('preview.title')}</span>
         </div>
         <div className="flex items-center gap-1 md:gap-3 flex-shrink-0">
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => navigate('/settings')}
+              className="hidden xl:inline-flex"
+            >
+              全局配置
+            </Button>
             <Button
               variant="ghost"
               size="sm"
@@ -1664,6 +1684,15 @@ export const SlidePreview: React.FC = () => {
                 </div>
               )}
             </div>
+            <Button
+              variant="ghost"
+              size="sm"
+              icon={<FileText size={16} />}
+              onClick={() => navigate('/exports')}
+              className="hidden md:inline-flex"
+              title="导出任务中心"
+              aria-label="导出任务中心"
+            />
           
           <div className="relative">
             <Button
@@ -2333,7 +2362,7 @@ export const SlidePreview: React.FC = () => {
         </aside>
 
         {/* 右侧：大图预览 */}
-        <main className="flex-1 flex flex-col bg-gradient-to-br from-banana-50 dark:from-background-primary via-white dark:via-background-primary to-gray-50 dark:to-background-primary min-w-0 overflow-hidden">
+        <main className="flex-1 flex flex-col bg-gray-50 dark:bg-background-primary min-w-0 overflow-hidden">
           {currentProject.pages.length === 0 ? (
             <div className="flex-1 flex items-center justify-center overflow-y-auto">
               <div className="text-center">
@@ -2369,7 +2398,9 @@ export const SlidePreview: React.FC = () => {
                     ) : (
                       <div className="w-full h-full flex items-center justify-center bg-gray-100 dark:bg-background-secondary">
                         <div className="text-center">
-                          <div className="text-6xl mb-4">🍌</div>
+                          <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-md bg-white text-gray-400 shadow-sm">
+                            <ImageIcon size={28} />
+                          </div>
                           <p className="text-gray-500 dark:text-foreground-tertiary mb-4">
                             {selectedPage?.status === 'QUEUED'
                               ? t('preview.queued')

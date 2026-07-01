@@ -583,11 +583,11 @@ export const DetailEditor: React.FC = () => {
   const missingDescCount = currentProject.pages.filter(p => !p.description_content).length;
 
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-background-primary flex flex-col">
-      {/* 顶栏 */}
-      <header className="bg-white dark:bg-background-secondary shadow-sm dark:shadow-background-primary/30 border-b border-gray-200 dark:border-border-primary px-3 md:px-6 py-2 md:py-3 flex-shrink-0">
+    <div className="flex min-h-[calc(100vh-8rem)] flex-col overflow-hidden rounded-md border border-gray-200 bg-white dark:bg-background-primary">
+      {/* 项目阶段工具栏 */}
+      <header className="bg-white dark:bg-background-secondary border-b border-gray-200 dark:border-border-primary px-3 md:px-5 py-2 md:py-3 flex-shrink-0">
         <div className="flex items-center justify-between gap-2 md:gap-4">
-          {/* 左侧：Logo 和标题 */}
+          {/* 左侧：项目阶段和返回路径 */}
           <div className="flex items-center gap-2 md:gap-4 flex-shrink-0">
             <Button
               variant="ghost"
@@ -605,12 +605,17 @@ export const DetailEditor: React.FC = () => {
             >
               <span className="hidden sm:inline">{t('common.back')}</span>
             </Button>
-            <div className="flex items-center gap-1.5 md:gap-2">
-              <span className="text-xl md:text-2xl">🍌</span>
-              <span className="text-base md:text-xl font-bold">{t('home.title')}</span>
+            <div className="min-w-0">
+              <div className="flex items-center gap-2">
+                <span className="rounded-md bg-blue-50 px-2 py-1 text-xs font-semibold text-blue-700">描述</span>
+                <span className="text-sm md:text-base font-semibold text-gray-900 dark:text-foreground-primary truncate">
+                  {currentProject.project_title || t('detail.title')}
+                </span>
+              </div>
+              <div className="mt-0.5 hidden text-xs text-gray-500 md:block">
+                {currentProject.pages.filter((p) => p.description_content).length} / {currentProject.pages.length} 页已完成
+              </div>
             </div>
-            <span className="text-gray-400 hidden lg:inline">|</span>
-            <span className="text-sm md:text-lg font-semibold hidden lg:inline">{t('detail.title')}</span>
           </div>
           
           {/* 中间：AI 修改输入框 */}
@@ -627,6 +632,30 @@ export const DetailEditor: React.FC = () => {
 
           {/* 右侧：操作按钮 */}
           <div className="flex items-center gap-1.5 md:gap-2 flex-shrink-0">
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => navigate('/')}
+              className="hidden lg:inline-flex"
+            >
+              工作台
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => navigate('/history')}
+              className="hidden lg:inline-flex"
+            >
+              我的项目
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => navigate('/settings')}
+              className="hidden xl:inline-flex"
+            >
+              全局配置
+            </Button>
             <Button
               variant="secondary"
               size="sm"
