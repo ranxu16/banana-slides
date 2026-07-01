@@ -1,7 +1,6 @@
 import type { ReactNode } from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
 import {
-  FolderOpen,
   History,
   LayoutDashboard,
   Library,
@@ -31,8 +30,7 @@ interface ShellNavItem {
 const navItems: ShellNavItem[] = [
   { to: '/', label: '工作台', icon: LayoutDashboard },
   { to: '/history', label: '我的项目', icon: History },
-  { to: '/templates', label: '模板中心', icon: FolderOpen },
-  { to: '/materials', label: '素材中心', icon: Library },
+  { to: '/resources', label: '资源中心', icon: Library },
   { to: '/exports', label: '导出任务', icon: UploadCloud },
 ];
 
@@ -97,7 +95,7 @@ export function AppShell({ children, title, description, actions }: AppShellProp
             </button>
             <div className="hidden h-9 w-[320px] items-center gap-2 rounded-md border border-gray-200 bg-gray-50 px-3 text-sm text-gray-400 md:flex">
               <Search size={16} />
-              <span>搜索项目、模板、配置</span>
+              <span>搜索项目、资源、配置</span>
             </div>
           </div>
 

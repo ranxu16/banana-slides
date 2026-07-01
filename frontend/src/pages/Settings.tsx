@@ -1431,15 +1431,32 @@ export const Settings: React.FC = () => {
     settings?.elevenlabs_api_key_length,
   ].filter((length) => Number(length) > 0).length;
   const configNavItems = [
-    { href: '#settings-api', label: '基础信息' },
-    { href: '#settings-models', label: 'AI 模型' },
-    { href: '#settings-export', label: 'PPT 导出' },
-    { href: '#settings-parsing', label: '文件解析' },
-    { href: '#settings-advanced', label: '服务连接' },
-    { href: '#settings-advanced', label: '兼容与高级' },
-    { href: '#settings-tests', label: '服务测试' },
-    { href: '#settings-overrides', label: '项目覆盖' },
+    { href: '#settings-api', label: '基础配置', description: '默认 Provider、Base URL、密钥' },
+    { href: '#settings-models', label: 'AI 模型', description: '文本、图片、视觉理解模型' },
+    { href: '#settings-generation', label: '生成策略', description: '清晰度、语言、生成并发' },
+    { href: '#settings-parsing', label: '文件解析', description: 'MinerU、OCR 与解析依赖' },
+    { href: '#settings-service', label: '服务连接', description: 'OpenAI OAuth、语音合成' },
+    { href: '#settings-advanced', label: '兼容高级', description: '推理模式与兼容 Provider' },
+    { href: '#settings-tests', label: '服务测试', description: '主动验证服务可用性' },
+    { href: '#settings-overrides', label: '项目覆盖', description: '项目级覆盖来源说明' },
   ];
+  const sectionByTitle = (title: string) => settingsSections.find((section) => section.title === title);
+  const generationSections = [
+    sectionByTitle(t('settings.sections.imageConfig')),
+    sectionByTitle(t('settings.sections.outputLanguage')),
+    sectionByTitle(t('settings.sections.performanceConfig')),
+  ].filter(Boolean) as SectionConfig[];
+  const parsingSections = [
+    sectionByTitle(t('settings.sections.mineruConfig')),
+    sectionByTitle(t('settings.sections.baiduOcr')),
+  ].filter(Boolean) as SectionConfig[];
+  const serviceSections = [
+    sectionByTitle(t('settings.sections.elevenlabs')),
+  ].filter(Boolean) as SectionConfig[];
+  const advancedSections = [
+    sectionByTitle(t('settings.sections.textReasoning')),
+    sectionByTitle(t('settings.sections.imageReasoning')),
+  ].filter(Boolean) as SectionConfig[];
 
   if (isLoading) {
     return (
@@ -1454,26 +1471,21 @@ export const Settings: React.FC = () => {
       <ToastContainer toasts={settingsToasts} onRemove={settingsRemove} />
       {ConfirmDialog}
       <div className="space-y-6">
-        <div className="grid gap-3 md:grid-cols-4">
-          <div className="rounded-md border border-gray-200 bg-white p-4">
-            <div className="text-xs font-medium text-gray-500">推荐主线</div>
-            <div className="mt-2 text-base font-semibold text-gray-900">OpenAI / ChatGPT</div>
-            <div className="mt-1 text-xs text-gray-500">文本、视觉理解、图片生成优先走 OpenAI 配置</div>
+        <div className="grid gap-3 lg:grid-cols-[1.3fr_1fr_1fr]">
+          <div className="rounded-md border border-amber-200 bg-amber-50 p-4">
+            <div className="text-xs font-semibold text-amber-700">推荐主线</div>
+            <div className="mt-2 text-lg font-semibold text-gray-900">OpenAI / ChatGPT</div>
+            <div className="mt-1 text-sm leading-6 text-gray-600">文本、视觉理解、图片生成和可编辑 PPTX 图层生成优先走 OpenAI 主线，其他 Provider 作为兼容和专项能力。</div>
           </div>
           <div className="rounded-md border border-gray-200 bg-white p-4">
             <div className="text-xs font-medium text-gray-500">当前默认 Provider</div>
-            <div className="mt-2 text-base font-semibold text-gray-900">{providerLabel}</div>
-            <div className="mt-1 text-xs text-gray-500">来源：全局配置，可被模型级配置覆盖</div>
+            <div className="mt-2 text-lg font-semibold text-gray-900">{providerLabel}</div>
+            <div className="mt-1 text-xs text-gray-500">全局默认，可被模型级/项目级显式覆盖</div>
           </div>
           <div className="rounded-md border border-gray-200 bg-white p-4">
             <div className="text-xs font-medium text-gray-500">敏感密钥</div>
-            <div className="mt-2 text-base font-semibold text-gray-900">{configuredSecrets} 项已配置</div>
-            <div className="mt-1 text-xs text-gray-500">页面只显示状态和长度，不明文回显</div>
-          </div>
-          <div className="rounded-md border border-gray-200 bg-white p-4">
-            <div className="text-xs font-medium text-gray-500">项目覆盖</div>
-            <div className="mt-2 text-base font-semibold text-gray-900">显式覆盖优先</div>
-            <div className="mt-1 text-xs text-gray-500">项目级覆盖项后续统一展示来源</div>
+            <div className="mt-2 text-lg font-semibold text-gray-900">{configuredSecrets} 项已配置</div>
+            <div className="mt-1 text-xs text-gray-500">只显示状态和长度，不明文回显</div>
           </div>
         </div>
 
@@ -1486,9 +1498,10 @@ export const Settings: React.FC = () => {
                   <a
                     key={item.href}
                     href={item.href}
-                    className="block rounded-md px-2 py-2 text-sm font-medium text-gray-600 transition-colors hover:bg-amber-50 hover:text-amber-700"
+                    className="block rounded-md px-2 py-2 transition-colors hover:bg-amber-50 hover:text-amber-700"
                   >
-                    {item.label}
+                    <span className="block text-sm font-semibold text-gray-700">{item.label}</span>
+                    <span className="mt-0.5 block text-xs leading-5 text-gray-500">{item.description}</span>
                   </a>
                 ))}
               </nav>
@@ -1622,30 +1635,138 @@ export const Settings: React.FC = () => {
           </div>
         </div>
 
-        {/* 其余配置区块（配置驱动，排除性能配置和推理模式） */}
-        <div className="space-y-8">
-          {settingsSections.filter((section) =>
-            section.title !== t('settings.sections.performanceConfig') &&
-            section.title !== t('settings.sections.textReasoning') &&
-            section.title !== t('settings.sections.imageReasoning')
-          ).map((section) => (
-            <div
-              key={section.title}
-              id={section.title === t('settings.sections.mineruConfig') ? 'settings-parsing' : section.title === t('settings.sections.imageConfig') ? 'settings-export' : undefined}
-              className="rounded-md border border-gray-200 bg-white p-5"
-            >
-              <h2 className="text-xl font-semibold text-gray-900 dark:text-foreground-primary mb-4 flex items-center">
-                {section.icon}
-                <span className="ml-2">{section.title}</span>
-              </h2>
-              <div className="space-y-4">
-                {section.fields.map((field) => renderField(field))}
+        <div id="settings-generation" className="rounded-md border border-gray-200 bg-white p-5">
+          <div className="mb-4">
+            <h2 className="text-xl font-semibold text-gray-900">生成策略</h2>
+            <p className="mt-1 text-sm text-gray-500">控制图片清晰度、输出语言和生成并发，影响生成速度、成本和稳定性。</p>
+          </div>
+          <div className="grid gap-5 xl:grid-cols-2">
+            {generationSections.map((section) => (
+              <div key={section.title} className="rounded-md border border-gray-100 bg-gray-50 p-4">
+                <h3 className="mb-3 flex items-center gap-2 text-sm font-semibold text-gray-800">
+                  {section.icon}
+                  {section.title}
+                </h3>
+                <div className="space-y-4">
+                  {section.fields.map((field) => renderField(field))}
+                </div>
               </div>
-            </div>
-          ))}
+            ))}
+          </div>
         </div>
 
-        {/* 高级设置（折叠区域） */}
+        <div id="settings-parsing" className="rounded-md border border-gray-200 bg-white p-5">
+          <div className="mb-4">
+            <h2 className="text-xl font-semibold text-gray-900">文件解析</h2>
+            <p className="mt-1 text-sm text-gray-500">集中配置参考文件解析、OCR 和可编辑 PPTX 依赖服务。</p>
+          </div>
+          <div className="grid gap-5 xl:grid-cols-2">
+            {parsingSections.map((section) => (
+              <div key={section.title} className="rounded-md border border-gray-100 bg-gray-50 p-4">
+                <h3 className="mb-3 flex items-center gap-2 text-sm font-semibold text-gray-800">
+                  {section.icon}
+                  {section.title}
+                </h3>
+                <div className="space-y-4">
+                  {section.fields.map((field) => renderField(field))}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <div id="settings-service" className="rounded-md border border-gray-200 bg-white p-5">
+          <div className="mb-5">
+            <h2 className="text-xl font-semibold text-gray-900">服务连接</h2>
+            <p className="mt-1 text-sm text-gray-500">连接 OpenAI 账号与语音合成服务。服务测试仍需在下方主动触发。</p>
+          </div>
+          <div className="space-y-6">
+            <div>
+              <h3 className="text-base font-semibold text-gray-900 dark:text-foreground-primary mb-1 flex items-center">
+                <Link2 size={18} />
+                <span className="ml-2">{t('settings.openaiOAuth.title')}</span>
+              </h3>
+              <p className="text-sm text-gray-500 dark:text-foreground-tertiary mb-4">{t('settings.openaiOAuth.description')}</p>
+              <div className="rounded-md border border-gray-200 p-4">
+                <div className="flex items-center justify-between gap-3">
+                  <div className="flex items-center gap-3">
+                    <div className={`w-2.5 h-2.5 rounded-full ${settings?.openai_oauth_connected ? 'bg-green-500' : 'bg-gray-300 dark:bg-gray-600'}`} />
+                    <div>
+                      <span className="text-sm font-medium text-gray-700 dark:text-foreground-secondary">
+                        {settings?.openai_oauth_connected ? t('settings.openaiOAuth.connected') : t('settings.openaiOAuth.disconnected')}
+                      </span>
+                      {settings?.openai_oauth_connected && settings?.openai_oauth_account_id && (
+                        <span className="ml-2 text-sm text-gray-500 dark:text-foreground-tertiary">
+                          ({settings.openai_oauth_account_id})
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                  {settings?.openai_oauth_connected ? (
+                    <button
+                      onClick={handleOAuthDisconnect}
+                      className="px-4 py-2 text-sm font-medium text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg hover:bg-red-100 dark:hover:bg-red-900/30 transition-colors"
+                    >
+                      {t('settings.openaiOAuth.disconnectBtn')}
+                    </button>
+                  ) : (
+                    <button
+                      onClick={handleOAuthLogin}
+                      disabled={oauthConnecting}
+                      className="px-4 py-2 text-sm font-medium text-white bg-gray-900 dark:bg-white dark:text-gray-900 rounded-lg hover:bg-gray-800 dark:hover:bg-gray-100 transition-colors disabled:opacity-50"
+                    >
+                      {oauthConnecting ? t('settings.openaiOAuth.connecting') : t('settings.openaiOAuth.loginBtn')}
+                    </button>
+                  )}
+                </div>
+                <p className="mt-3 text-xs text-gray-500 dark:text-foreground-tertiary">{t('settings.openaiOAuth.hint')}</p>
+                {!settings?.openai_oauth_connected && (
+                  <div className="mt-3">
+                    <button
+                      onClick={() => setManualCallbackOpen(v => !v)}
+                      className="text-xs text-blue-600 dark:text-blue-400 hover:underline"
+                    >
+                      {t('settings.openaiOAuth.manualCallbackLabel')}
+                    </button>
+                    {manualCallbackOpen && (
+                      <div className="mt-2 rounded-md border border-amber-200 bg-amber-50 p-3">
+                        <p className="text-xs text-amber-700 dark:text-amber-300 mb-2">{t('settings.openaiOAuth.manualCallbackHint')}</p>
+                        <div className="flex gap-2">
+                          <input
+                            type="text"
+                            value={manualCallbackUrl}
+                            onChange={(e) => setManualCallbackUrl(e.target.value)}
+                            placeholder={t('settings.openaiOAuth.manualCallbackPlaceholder')}
+                            className="flex-1 px-3 py-1.5 text-xs border border-gray-300 dark:border-border-primary rounded-md bg-white dark:bg-background-secondary text-gray-900 dark:text-foreground-primary placeholder-gray-400"
+                          />
+                          <button
+                            onClick={handleManualCallback}
+                            disabled={manualCallbackSubmitting || !manualCallbackUrl.trim()}
+                            className="px-3 py-1.5 text-xs font-medium text-white bg-gray-900 dark:bg-white dark:text-gray-900 rounded-md hover:bg-gray-800 dark:hover:bg-gray-100 transition-colors disabled:opacity-50"
+                          >
+                            {t('settings.openaiOAuth.manualCallbackSubmit')}
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            </div>
+            {serviceSections.map((section) => (
+              <div key={section.title} className="rounded-md border border-gray-100 bg-gray-50 p-4">
+                <h3 className="mb-3 flex items-center gap-2 text-sm font-semibold text-gray-800">
+                  {section.icon}
+                  {section.title}
+                </h3>
+                <div className="space-y-4">
+                  {section.fields.map((field) => renderField(field))}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+
         <div id="settings-advanced" className="rounded-md border border-gray-200 bg-white p-5">
           <button
             type="button"
@@ -1661,94 +1782,13 @@ export const Settings: React.FC = () => {
             />
           </button>
           {advancedOpen && (
-            <div className="pb-4 space-y-8">
-              {/* OpenAI OAuth 连接区块 */}
-              <div>
-                <h2 className="text-xl font-semibold text-gray-900 dark:text-foreground-primary mb-1 flex items-center">
-                  <Link2 size={20} />
-                  <span className="ml-2">{t('settings.openaiOAuth.title')}</span>
-                </h2>
-                <p className="text-sm text-gray-500 dark:text-foreground-tertiary mb-4">{t('settings.openaiOAuth.description')}</p>
-                <div className="p-4 border border-gray-200 dark:border-border-primary rounded-lg">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-3">
-                      <div className={`w-2.5 h-2.5 rounded-full ${settings?.openai_oauth_connected ? 'bg-green-500' : 'bg-gray-300 dark:bg-gray-600'}`} />
-                      <div>
-                        <span className="text-sm font-medium text-gray-700 dark:text-foreground-secondary">
-                          {settings?.openai_oauth_connected ? t('settings.openaiOAuth.connected') : t('settings.openaiOAuth.disconnected')}
-                        </span>
-                        {settings?.openai_oauth_connected && settings?.openai_oauth_account_id && (
-                          <span className="ml-2 text-sm text-gray-500 dark:text-foreground-tertiary">
-                            ({settings.openai_oauth_account_id})
-                          </span>
-                        )}
-                      </div>
-                    </div>
-                    <div>
-                      {settings?.openai_oauth_connected ? (
-                        <button
-                          onClick={handleOAuthDisconnect}
-                          className="px-4 py-2 text-sm font-medium text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg hover:bg-red-100 dark:hover:bg-red-900/30 transition-colors"
-                        >
-                          {t('settings.openaiOAuth.disconnectBtn')}
-                        </button>
-                      ) : (
-                        <button
-                          onClick={handleOAuthLogin}
-                          disabled={oauthConnecting}
-                          className="px-4 py-2 text-sm font-medium text-white bg-gray-900 dark:bg-white dark:text-gray-900 rounded-lg hover:bg-gray-800 dark:hover:bg-gray-100 transition-colors disabled:opacity-50"
-                        >
-                          {oauthConnecting ? t('settings.openaiOAuth.connecting') : t('settings.openaiOAuth.loginBtn')}
-                        </button>
-                      )}
-                    </div>
-                  </div>
-                  <p className="mt-3 text-xs text-gray-500 dark:text-foreground-tertiary">{t('settings.openaiOAuth.hint')}</p>
-                  {!settings?.openai_oauth_connected && (
-                    <div className="mt-3">
-                      <button
-                        onClick={() => setManualCallbackOpen(v => !v)}
-                        className="text-xs text-blue-600 dark:text-blue-400 hover:underline"
-                      >
-                        {t('settings.openaiOAuth.manualCallbackLabel')}
-                      </button>
-                      {manualCallbackOpen && (
-                        <div className="mt-2 p-3 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg">
-                          <p className="text-xs text-amber-700 dark:text-amber-300 mb-2">{t('settings.openaiOAuth.manualCallbackHint')}</p>
-                          <div className="flex gap-2">
-                            <input
-                              type="text"
-                              value={manualCallbackUrl}
-                              onChange={(e) => setManualCallbackUrl(e.target.value)}
-                              placeholder={t('settings.openaiOAuth.manualCallbackPlaceholder')}
-                              className="flex-1 px-3 py-1.5 text-xs border border-gray-300 dark:border-border-primary rounded-md bg-white dark:bg-background-secondary text-gray-900 dark:text-foreground-primary placeholder-gray-400"
-                            />
-                            <button
-                              onClick={handleManualCallback}
-                              disabled={manualCallbackSubmitting || !manualCallbackUrl.trim()}
-                              className="px-3 py-1.5 text-xs font-medium text-white bg-gray-900 dark:bg-white dark:text-gray-900 rounded-md hover:bg-gray-800 dark:hover:bg-gray-100 transition-colors disabled:opacity-50"
-                            >
-                              {t('settings.openaiOAuth.manualCallbackSubmit')}
-                            </button>
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  )}
-                </div>
-              </div>
-
-              {/* 并发性能配置 + 推理模式 */}
-              {settingsSections.filter((section) =>
-                section.title === t('settings.sections.performanceConfig') ||
-                section.title === t('settings.sections.textReasoning') ||
-                section.title === t('settings.sections.imageReasoning')
-              ).map((section) => (
-                <div key={section.title}>
-                  <h2 className="text-xl font-semibold text-gray-900 dark:text-foreground-primary mb-4 flex items-center">
+            <div className="grid gap-5 pb-4 xl:grid-cols-2">
+              {advancedSections.map((section) => (
+                <div key={section.title} className="rounded-md border border-gray-100 bg-gray-50 p-4">
+                  <h3 className="mb-3 flex items-center gap-2 text-sm font-semibold text-gray-800">
                     {section.icon}
-                    <span className="ml-2">{section.title}</span>
-                  </h2>
+                    {section.title}
+                  </h3>
                   <div className="space-y-4">
                     {section.fields.map((field) => renderField(field))}
                   </div>

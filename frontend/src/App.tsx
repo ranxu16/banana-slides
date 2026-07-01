@@ -9,8 +9,7 @@ import { SlidePreview } from './pages/SlidePreview';
 import { SettingsPage } from './pages/Settings';
 import { Admin } from './pages/Admin';
 import { ExportTasks } from './pages/ExportTasks';
-import { Templates } from './pages/Templates';
-import { Materials } from './pages/Materials';
+import { Resources } from './pages/Resources';
 import { useProjectStore } from './store/useProjectStore';
 import { useToast, ToastContainer, AuthGuard } from './components/shared';
 import { AppShell } from './components/layout';
@@ -52,21 +51,15 @@ function App() {
           <Route path="/landing" element={<Landing />} />
           <Route path="/history" element={<AppShell><History /></AppShell>} />
           <Route
-            path="/templates"
+            path="/resources"
             element={
-              <AppShell title="模板中心" description="管理汇报模板、业务场景和默认模板策略">
-                <Templates />
+              <AppShell title="资源中心" description="统一管理光伏业务素材、品牌资产和汇报模板">
+                <Resources />
               </AppShell>
             }
           />
-          <Route
-            path="/materials"
-            element={
-              <AppShell title="素材中心" description="管理光伏业务图片、图标、品牌资产和常用素材">
-                <Materials />
-              </AppShell>
-            }
-          />
+          <Route path="/templates" element={<Navigate to="/resources?tab=templates" replace />} />
+          <Route path="/materials" element={<Navigate to="/resources?tab=materials" replace />} />
           <Route
             path="/exports"
             element={

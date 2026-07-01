@@ -918,3 +918,21 @@ ui-guangfu-dashboard-redesign
 - 验证：`npm run guard:brand` 通过；`npm run test:run -- src/tests/branding-workbench-regression.test.ts` 通过，2 tests passed；`npm run build` 通过；`git diff --check -- frontend/src/pages/OutlineEditor.tsx frontend/src/pages/DetailEditor.tsx frontend/src/pages/SlidePreview.tsx docs/design/guangfu-zhicheng-design.md` 通过；`rg` 检查三个页面不再包含旧品牌符号、旧 `home.title` 顶栏引用或旧全屏 banana 渐变背景。
 - 遗留：编辑区内部的卡片、工具条密度和移动端按钮折叠仍沿用旧实现；预览页局部弹窗/按钮仍有旧样式细节，后续可继续做编辑区工作流优化；本次未做浏览器截图验收。
 - 下一步：阶段性提交本次编辑/预览页外壳统一；随后可切回后端可编辑 PPTX 稳定流水线，或继续细化编辑页移动端/密度。
+
+### 2026-07-01 11:50 - 资源中心合并与全局配置重设计启动
+
+- 范围：`frontend/src/components/layout/AppShell.tsx`、`frontend/src/App.tsx`、`frontend/src/pages/Templates.tsx`、`frontend/src/pages/Materials.tsx`、`frontend/src/pages/Settings.tsx`。
+- 动作：根据反馈重新评估模板中心和素材中心的信息架构，确认二者本质都是资源管理；检查全局配置中心左侧导航和右侧 section 对应关系，发现“服务连接/兼容与高级”指向同一折叠区，生成、导出、文件解析字段也分散在多个卡片里。
+- 结果：本步骤决定把模板与素材合并为“资源中心”，使用标签页区分模板和素材；原 `/templates`、`/materials` 保留兼容跳转；全局配置中心改成左侧目录与右侧 section 一一对应的结构，重新分组为基础信息、AI 模型、生成策略、文件解析、服务连接、兼容高级、服务测试、项目覆盖。
+- 验证：已读取当前实现和最近执行记录，确认本次仍只做前端信息架构和布局改造，不改模板/素材/设置后端接口。
+- 遗留：合并资源中心后，编辑页上下文“使用资源”仍需后续接入；全局配置中心的字段级校验和脏状态拦截仍不在本步骤内。
+- 下一步：新增 `Resources.tsx`，改 AppShell 导航与路由；重排 `Settings.tsx` 右侧 section 和目录映射。
+
+### 2026-07-01 12:15 - 资源中心合并与全局配置重设计完成
+
+- 范围：`frontend/src/pages/Resources.tsx`、`frontend/src/pages/Templates.tsx`、`frontend/src/pages/Materials.tsx`、`frontend/src/App.tsx`、`frontend/src/components/layout/AppShell.tsx`、`frontend/src/pages/Settings.tsx`、`docs/design/guangfu-zhicheng-design.md`。
+- 动作：新增统一资源中心页面，以标签页合并素材库和模板库；AppShell 左侧导航从“模板中心/素材中心”合并为“资源中心”；`/templates`、`/materials` 改为兼容重定向到 `/resources?tab=templates|materials`；全局配置中心重新分组为基础配置、AI 模型、生成策略、文件解析、服务连接、兼容高级、服务测试、项目覆盖，左侧目录每项对应右侧唯一 section；OpenAI OAuth 与 ElevenLabs 归入服务连接，清晰度/语言/并发归入生成策略，MinerU/OCR 归入文件解析。
+- 结果：资源管理心智从两个相似一级入口收敛为一个资源中心；全局配置中心左侧导航和右侧内容不再错位，页面结构更接近“配置中心”而不是零散表单堆叠；顶部搜索提示同步改为“项目、资源、配置”。
+- 验证：`npm run guard:brand` 通过；`npm run test:run -- src/tests/branding-workbench-regression.test.ts` 通过，2 tests passed；`npm run build` 通过；`git diff --check -- frontend/src/App.tsx frontend/src/components/layout/AppShell.tsx frontend/src/pages/Resources.tsx frontend/src/pages/Settings.tsx docs/design/guangfu-zhicheng-design.md` 通过；`rg` 检查旧 `/templates`、`/materials` 页面入口只剩兼容重定向、API 路径和静态模板资源路径。
+- 遗留：资源中心内部仍复用原素材/模板两个页面组件，各自 Toast/Confirm 容器后续可进一步抽到统一资源页；“使用资源/设为默认模板”仍需后端字段和编辑页上下文支持；全局配置中心字段级校验、脏状态拦截仍待做。
+- 下一步：阶段性提交本次资源中心合并与全局配置重设计；随后可继续做资源中心内聚交互，或切回后端可编辑 PPTX 稳定流水线。
