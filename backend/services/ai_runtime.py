@@ -173,3 +173,42 @@ def resolve_user_image_ai_runtime(user):
     service.text_model = text_runtime.model
     service.image_model = image_runtime.model
     return {"prompt": text_runtime, "image": image_runtime}, service
+
+
+def resolve_user_editable_pptx_ai_runtime(user):
+    """Build the isolated caption + image service required by editable PPTX export."""
+    from services.ai_service import AIService
+    from services.ai_service_manager import (
+        get_runtime_caption_provider,
+        get_runtime_image_provider,
+    )
+    from services.settings_resolver import resolve_capability_runtime_config
+
+    visual_runtime = AIRuntimeConfig.from_resolved(
+        "editable_pptx_visual",
+        resolve_capability_runtime_config("editable_pptx_visual", user),
+    )
+    element_runtime = AIRuntimeConfig.from_resolved(
+        "editable_pptx_element",
+        resolve_capability_runtime_config("editable_pptx_element", user),
+    )
+    for runtime in (visual_runtime, element_runtime):
+        if runtime.provider == "codex":
+            raise ValueError(
+                "Editable PPTX export requires API credentials or an enterprise proxy; "
+                "Codex subscription login is not supported."
+            )
+        if runtime.provider in {"qwen", "doubao", "deepseek", "glm", "siliconflow", "sensenova", "minimax", "kimi", "lazyllm"}:
+            raise ValueError(
+                "Editable PPTX personal runtime currently requires an isolated API provider; "
+                "LazyLLM runtime isolation is not available yet."
+            )
+
+    service = AIService(
+        caption_provider=get_runtime_caption_provider(visual_runtime),
+        image_provider=get_runtime_image_provider(element_runtime),
+        initialize_missing_providers=False,
+    )
+    service.caption_model = visual_runtime.model
+    service.image_model = element_runtime.model
+    return {"visual": visual_runtime, "element": element_runtime}, service

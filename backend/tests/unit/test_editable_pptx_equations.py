@@ -1,8 +1,10 @@
 from zipfile import ZipFile
+from unittest.mock import MagicMock, patch
 
 from PIL import Image
 
 from services.export_service import ExportService
+from services.editable_pptx_pipeline import SlideStructure
 from services.image_editability.text_attribute_extractors import ColoredSegment, TextStyleResult
 from utils.pptx_builder import PPTXBuilder
 from utils.pptx_math import latex_to_display_text, looks_like_latex_math
@@ -227,6 +229,38 @@ class _EditableImage:
         self.elements = elements
 
 
+def test_editable_export_uses_injected_visual_runtime_for_analysis_and_composition(tmp_path):
+    background = tmp_path / "slide-runtime.png"
+    Image.new("RGB", (300, 120), "white").save(background)
+    output = tmp_path / "editable-runtime.pptx"
+    visual_service = MagicMock(name="isolated-visual-service")
+    structure = SlideStructure(
+        background_type="color",
+        background_color="#FFFFFF",
+        shapes=[{"shape_type": "rect", "bbox": [0, 0, 10, 10]}],
+    )
+
+    with patch.object(
+        ExportService,
+        "_analyze_slide_visual_structure",
+        return_value=structure,
+    ) as analyze, patch(
+        "services.editable_pptx_pipeline.EditablePptxVisualPipeline.compose_visual_layers",
+    ) as compose:
+        ExportService.create_editable_pptx_with_recursive_analysis(
+            editable_images=[_EditableImage(str(background), [])],
+            output_file=str(output),
+            slide_width_pixels=300,
+            slide_height_pixels=120,
+            enable_visual_structure_analysis=True,
+            visual_ai_service=visual_service,
+            fail_fast=True,
+        )
+
+    assert analyze.call_args.kwargs["ai_service"] is visual_service
+    assert compose.call_args.kwargs["ai_service"] is visual_service
+
+
 def test_editable_export_renders_latex_text_content_as_native_omml(tmp_path):
     background = tmp_path / "slide.png"
     Image.new("RGB", (300, 120), "white").save(background)
@@ -309,4 +343,3 @@ def test_equation_metadata_without_latex_content_stays_plain_text(tmp_path):
     slide_xml = _slide_xml(output)
     assert "<m:oMath" not in slide_xml
     assert "Revenue formula" in slide_xml
-

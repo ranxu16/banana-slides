@@ -213,3 +213,42 @@ def test_composite_image_service_rejects_codex_subscription_image_provider():
             assert 'requires an API key' in str(exc)
         else:
             raise AssertionError('Codex subscription must not run image generation')
+
+
+def test_editable_pptx_runtime_combines_caption_and_image_providers():
+    from services.ai_runtime import resolve_user_editable_pptx_ai_runtime
+
+    resolved = {
+        'editable_pptx_visual': {
+            'image_caption_model_source': 'openai',
+            'image_caption_model': 'gpt-5.5',
+            'image_caption_api_key': 'vision-key',
+            '_effective_source': {'provider': 'personal', 'credential': 'personal'},
+        },
+        'editable_pptx_element': {
+            'image_model_source': 'openai',
+            'image_model': 'gpt-image-2',
+            'image_api_key': 'element-key',
+            'openai_image_api_protocol': 'images',
+            '_effective_source': {'provider': 'personal', 'credential': 'personal'},
+        },
+    }
+    caption_provider = MagicMock(name='caption-provider')
+    image_provider = MagicMock(name='image-provider')
+
+    with patch(
+        'services.settings_resolver.resolve_capability_runtime_config',
+        side_effect=lambda capability, user: resolved[capability],
+    ), patch(
+        'services.ai_service_manager.get_runtime_caption_provider',
+        return_value=caption_provider,
+    ), patch(
+        'services.ai_service_manager.get_runtime_image_provider',
+        return_value=image_provider,
+    ):
+        runtimes, service = resolve_user_editable_pptx_ai_runtime(object())
+
+    assert service.caption_provider is caption_provider
+    assert service.image_provider is image_provider
+    assert runtimes['visual'].capability == 'editable_pptx_visual'
+    assert runtimes['element'].model == 'gpt-image-2'

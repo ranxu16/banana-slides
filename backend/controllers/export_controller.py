@@ -19,6 +19,7 @@ from utils import (
 from utils.auth import require_auth, get_current_user
 from services import ExportService, FileService
 from services.ai_service_manager import get_ai_service
+from services.ai_runtime import resolve_user_editable_pptx_ai_runtime
 from services.prompts import normalize_narration_generation_config
 
 logger = logging.getLogger(__name__)
@@ -457,12 +458,27 @@ def export_editable_pptx(project_id):
         if not isinstance(max_workers, int) or max_workers < 1 or max_workers > 16:
             return bad_request("max_workers must be an integer between 1 and 16")
         
+        try:
+            runtimes, visual_ai_service = resolve_user_editable_pptx_ai_runtime(get_current_user())
+        except ValueError as e:
+            logger.warning("Editable PPTX runtime configuration unavailable: %s", e)
+            return error_response(
+                'EDITABLE_PPTX_CONFIG_UNAVAILABLE',
+                str(e),
+                503,
+            )
+
         # Create task record
         task = Task(
             project_id=project_id,
             task_type='EXPORT_EDITABLE_PPTX',
             status='PENDING'
         )
+        task.set_progress({
+            'config_source': {
+                key: runtime.public_summary() for key, runtime in runtimes.items()
+            }
+        })
         db.session.add(task)
         db.session.commit()
         
@@ -513,6 +529,7 @@ def export_editable_pptx(project_id):
             export_inpaint_method=export_inpaint_method,
             enable_icon_subject_extraction=enable_icon_subject_extraction,
             enable_visual_structure_analysis=enable_visual_structure_analysis,
+            visual_ai_service=visual_ai_service,
             app=app
         )
         

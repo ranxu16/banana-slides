@@ -94,14 +94,24 @@ class TestExportEditablePptxTaskStatusTransition:
         mock_warnings.has_warnings.return_value = False
         mock_warnings.to_dict.return_value = {}
 
+        visual_ai_service = MagicMock(name='isolated-visual-service')
         with patch(
             "services.export_service.ExportService.create_editable_pptx_with_recursive_analysis",
             return_value=(None, mock_warnings),
-        ), patch(
+        ) as export_mock, patch(
             "services.image_editability.TextAttributeExtractorFactory.create_caption_model_extractor",
             return_value=MagicMock(),
-        ):
-            _run_task(app, task_id, pid, file_service)
+        ) as extractor_factory:
+            _run_task(
+                app,
+                task_id,
+                pid,
+                file_service,
+                visual_ai_service=visual_ai_service,
+            )
+
+        assert export_mock.call_args.kwargs['visual_ai_service'] is visual_ai_service
+        extractor_factory.assert_called_once_with(ai_service=visual_ai_service)
 
         with app.app_context():
             task = Task.query.get(task_id)
@@ -312,7 +322,13 @@ class TestExportEditablePptxTaskStatusTransition:
             db.session.commit()
 
         # Mock task_manager.submit_task 防止真实后台线程启动
-        with patch("services.task_manager.task_manager.submit_task"):
+        runtime = MagicMock()
+        runtime.public_summary.return_value = {'provider': 'openai', 'model': 'gpt-test'}
+        visual_service = MagicMock(name='isolated-visual-service')
+        with patch(
+            "controllers.export_controller.resolve_user_editable_pptx_ai_runtime",
+            return_value=({'visual': runtime, 'element': runtime}, visual_service),
+        ), patch("services.task_manager.task_manager.submit_task") as submit_task:
             resp2 = client.post(
                 f"/api/projects/{pid}/export/editable-pptx",
                 json={"filename": "unit-test-export.pptx"},
@@ -329,3 +345,39 @@ class TestExportEditablePptxTaskStatusTransition:
             assert task is not None
             assert task.status == "PENDING"
             assert task.task_type == "EXPORT_EDITABLE_PPTX"
+            assert task.get_progress()['config_source']['visual']['provider'] == 'openai'
+
+        assert submit_task.call_args.kwargs['visual_ai_service'] is visual_service
+
+    def test_export_route_returns_runtime_reason_without_creating_task(self, client):
+        resp = client.post(
+            "/api/projects",
+            json={"creation_type": "idea", "idea_prompt": "runtime error test"},
+        )
+        pid = resp.get_json()["data"]["project_id"]
+
+        with client.application.app_context():
+            page = Page(project_id=pid, order_index=0, status="COMPLETED")
+            page.generated_image_path = "fake/slide.png"
+            db.session.add(page)
+            db.session.commit()
+
+        with patch(
+            "controllers.export_controller.resolve_user_editable_pptx_ai_runtime",
+            side_effect=ValueError(
+                "Editable PPTX export requires API credentials; Codex subscription login is not supported."
+            ),
+        ), patch("services.task_manager.task_manager.submit_task") as submit_task:
+            response = client.post(f"/api/projects/{pid}/export/editable-pptx", json={})
+
+        assert response.status_code == 503
+        body = response.get_json()
+        assert body["error"]["code"] == "EDITABLE_PPTX_CONFIG_UNAVAILABLE"
+        assert "requires API credentials" in body["error"]["message"]
+        submit_task.assert_not_called()
+
+        with client.application.app_context():
+            assert Task.query.filter_by(
+                project_id=pid,
+                task_type="EXPORT_EDITABLE_PPTX",
+            ).count() == 0

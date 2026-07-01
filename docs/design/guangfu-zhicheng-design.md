@@ -808,6 +808,7 @@ ui-guangfu-dashboard-redesign
 - 文本模型、图片识别、图片生成三类服务测试已接入 effective config，未保存表单值作为最高优先级临时覆盖，并记录非敏感配置来源。
 - 大纲生成、页面描述和文本自然语言修改的主要同步、流式与后台任务入口已接入请求级 `AIRuntimeConfig`。
 - 批量图片生成、单页图片生成和图片编辑已接入“文本 prompt runtime + 图片 runtime”组合配置，并记录双来源摘要。
+- 可编辑 PPTX 已接入“Caption 视觉理解 runtime + Image 独立元素 runtime”，覆盖图层识别、文字样式视觉提取和独立元素生成。
 
 部分完成：
 
@@ -1331,3 +1332,18 @@ ui-guangfu-dashboard-redesign
 - 验证：提交前 `git diff --cached --check` 通过；完整后端 unit 回归为 `415 passed / 5 skipped`。
 - 遗留：可编辑 PPTX 的 `editable_pptx_visual`/`editable_pptx_element`、普通图片识别、导出队列 runtime 尚未接入；项目覆盖、密钥加密、用户级 OAuth 和个人 LazyLLM 隔离仍未完成。
 - 下一步：为可编辑 PPTX 构造“Caption 视觉理解 + Image 独立元素生成”组合 runtime，并从导出控制器传入后台任务和 ExportService，移除该流水线对全局 AIService 的依赖。
+
+### 2026-07-01 21:10 - 可编辑 PPTX 双 runtime 接入完成
+
+- 范围：`backend/controllers/export_controller.py`、`backend/services/ai_runtime.py`、`backend/services/task_manager.py`、`backend/services/export_service.py`、`backend/tests/unit/test_ai_runtime_isolation.py`、`backend/tests/unit/test_export_editable_pptx_task.py`、`backend/tests/unit/test_editable_pptx_equations.py`、`docs/design/guangfu-zhicheng-design.md`。
+- 动作：新增 `resolve_user_editable_pptx_ai_runtime`，分别解析 `editable_pptx_visual` 的 Caption Provider 和 `editable_pptx_element` 的 Image Provider；导出路由在任务落库前构造隔离 AIService，将双 runtime 来源写入任务并传入后台任务；后台任务继续传入 ExportService；视觉结构分析、文字样式 Caption 提取和独立元素生成统一使用注入的当前用户 AIService。
+- 结果：可编辑 PPTX 主路由不再依赖全局 AIService；GPT 图层识别使用当前用户视觉模型/API，`gpt-image-2` 独立元素使用当前用户图片模型/API；任务进度更新采用 merge，保留 `visual/element` 双来源摘要且不保存密钥。
+- 错误处理：Codex 订阅登录态和无法隔离的个人 LazyLLM 不允许运行必须 API 的可编辑 PPTX；路由在创建任务前返回 `503 EDITABLE_PPTX_CONFIG_UNAVAILABLE` 和真实原因，不留下 PENDING 任务，不再泛化为 500/网络失败。
+- 错误分类修正：`ValueError` 捕获仅包围 runtime 构造，后续文件服务、数据库或任务提交异常仍进入通用服务错误，不会被误标为模型配置不可用；修正后路由/runtime 定向测试 19 项通过。
+- 兼容性：直接调用 ExportService 且不传 `visual_ai_service` 时仍保留全局 AIService fallback，兼容历史单测和内部调用；正式 HTTP 导出路径始终注入隔离 runtime。
+- 计划状态：可编辑 PPTX 双 runtime 接入、定向回归和完整 unit 回归完成；待阶段提交。
+- 验证：`PYTHONPYCACHEPREFIX=/tmp/banana-pycache python3 -m py_compile ...` 通过；`uv run --python 3.13 pytest backend/tests/unit/test_ai_runtime_isolation.py backend/tests/unit/test_export_editable_pptx_task.py backend/tests/unit/test_editable_pptx_equations.py backend/tests/unit/test_editable_pptx_visual_pipeline.py backend/tests/unit/test_visual_structure_analysis.py -q` 通过，46 tests passed；`git diff --check` 通过。
+- 环境说明：默认 `python3 -m py_compile` 尝试写 `~/Library/Caches` 被沙箱阻止，改用 `/tmp/banana-pycache`；`uv` 访问现有 `~/.cache/uv` 需要沙箱外执行，用户已批准对应 pytest 前缀。
+- 完整回归：`uv run --python 3.13 pytest backend/tests/unit -q` 通过，`418 passed / 5 skipped`，覆盖 runtime、设置、项目、图片、OAuth、LazyLLM、可编辑 PPTX、公式、视觉结构和导出任务。
+- 遗留：普通图片识别独立入口、导出队列 effective runtime、项目覆盖、个人密钥加密、用户级 OAuth、个人 LazyLLM 隔离及可编辑 PPTX 原图视觉对比自动校正仍未完成。
+- 下一步：提交本阶段，再接导出队列来源/失败原因和项目覆盖层。

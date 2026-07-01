@@ -1567,6 +1567,7 @@ def export_editable_pptx_with_recursive_analysis_task(
     export_inpaint_method: str = 'hybrid',
     enable_icon_subject_extraction: bool = True,
     enable_visual_structure_analysis: bool = False,
+    visual_ai_service=None,
     app=None
 ):
     """
@@ -1629,7 +1630,8 @@ def export_editable_pptx_with_recursive_analysis_task(
                 logger.info(f"Task {task_id} status forced to PROCESSING (rows={updated_rows})")
 
                 task = Task.query.get(task_id)
-                task.set_progress({
+                progress = task.get_progress()
+                progress.update({
                     "total": 100,
                     "completed": 0,
                     "failed": 0,
@@ -1637,6 +1639,7 @@ def export_editable_pptx_with_recursive_analysis_task(
                     "percent": 0,
                     "messages": ["🚀 任务开始执行"]
                 })
+                task.set_progress(progress)
                 db.session.commit()
 
             # This prevents reading stale generated_image_path after page regeneration
@@ -1660,7 +1663,8 @@ def export_editable_pptx_with_recursive_analysis_task(
 
             task = Task.query.get(task_id)
             if task:
-                task.set_progress({
+                progress = task.get_progress()
+                progress.update({
                     "total": 100,
                     "completed": 0,
                     "failed": 0,
@@ -1668,6 +1672,7 @@ def export_editable_pptx_with_recursive_analysis_task(
                     "percent": 0,
                     "messages": ["🚀 开始导出可编辑PPTX..."]
                 })
+                task.set_progress(progress)
                 db.session.commit()
 
             progress_messages = ["🚀 开始导出可编辑PPTX..."]
@@ -1684,7 +1689,8 @@ def export_editable_pptx_with_recursive_analysis_task(
                     task = Task.query.get(task_id)
                     if task:
                         task.status = 'PROCESSING'
-                        task.set_progress({
+                        progress = task.get_progress()
+                        progress.update({
                             "total": 100,
                             "completed": percent,
                             "failed": 0,
@@ -1692,6 +1698,7 @@ def export_editable_pptx_with_recursive_analysis_task(
                             "percent": percent,
                             "messages": progress_messages.copy()
                         })
+                        task.set_progress(progress)
                         db.session.commit()
                 except Exception as e:
                     logger.warning(f"更新进度失败: {e}")
@@ -1722,7 +1729,9 @@ def export_editable_pptx_with_recursive_analysis_task(
             progress_callback("准备", f"幻灯片尺寸: {slide_width}×{slide_height}", 3)
 
             from services.image_editability import TextAttributeExtractorFactory
-            text_attribute_extractor = TextAttributeExtractorFactory.create_caption_model_extractor()
+            text_attribute_extractor = TextAttributeExtractorFactory.create_caption_model_extractor(
+                ai_service=visual_ai_service,
+            )
             progress_callback("准备", "文字属性提取器已初始化", 5)
 
             logger.info(f"Step 3: 创建可编辑PPTX (extractor={export_extractor_method}, inpaint={export_inpaint_method}, fail_fast={fail_fast})...")
@@ -1742,6 +1751,7 @@ def export_editable_pptx_with_recursive_analysis_task(
                 export_inpaint_method=export_inpaint_method,
                 enable_icon_subject_extraction=enable_icon_subject_extraction,
                 enable_visual_structure_analysis=enable_visual_structure_analysis,
+                visual_ai_service=visual_ai_service,
                 fail_fast=fail_fast,
             )
             _export_elapsed = time.time() - _export_start
@@ -1766,7 +1776,8 @@ def export_editable_pptx_with_recursive_analysis_task(
             if task:
                 task.status = 'COMPLETED'
                 task.completed_at = datetime.utcnow()
-                task.set_progress({
+                progress = task.get_progress()
+                progress.update({
                     "total": 100,
                     "completed": 100,
                     "failed": 0,
@@ -1780,6 +1791,7 @@ def export_editable_pptx_with_recursive_analysis_task(
                     "warnings": warning_messages,
                     "warning_details": export_warnings.to_dict() if export_warnings else {},
                 })
+                task.set_progress(progress)
                 db.session.commit()
                 logger.info(f"✓ 任务 {task_id} 完成 - 递归分析导出成功（深度={max_depth}）[总耗时 {_elapsed()}]")
 

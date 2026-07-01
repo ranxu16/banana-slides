@@ -1640,6 +1640,7 @@ class ExportService:
         export_inpaint_method: str = 'hybrid',  # 背景修复方法: generative, baidu, hybrid
         enable_icon_subject_extraction: bool = False,  # 是否对小尺寸图标走百度智能抠图
         enable_visual_structure_analysis: bool = False,  # 是否启用 Vision 视觉结构分析（Beta）
+        visual_ai_service=None,  # 可选：当前用户隔离的 Caption + Image AIService
         fail_fast: bool = True  # 是否在遇到错误时立即停止（False则收集警告继续）
     ) -> Tuple[Optional[bytes], ExportWarnings]:
         """
@@ -1754,8 +1755,11 @@ class ExportService:
             if not enable_visual_structure_analysis:
                 return
             try:
-                from services.ai_service_manager import get_ai_service
-                _vis_ai = get_ai_service()
+                if visual_ai_service is None:
+                    from services.ai_service_manager import get_ai_service
+                    _vis_ai = get_ai_service()
+                else:
+                    _vis_ai = visual_ai_service
                 _results: List[Optional[SlideStructure]] = [None] * len(editable_images)
 
                 def _analyze_one(_idx, _eimg):
@@ -1908,8 +1912,9 @@ class ExportService:
         builder.create_presentation()
         builder.setup_presentation_size(slide_width_pixels, slide_height_pixels)
         visual_pipeline = EditablePptxVisualPipeline()
-        from services.ai_service_manager import get_ai_service as _get_visual_ai_service
-        visual_ai_service = _get_visual_ai_service()
+        if visual_ai_service is None:
+            from services.ai_service_manager import get_ai_service as _get_visual_ai_service
+            visual_ai_service = _get_visual_ai_service()
         
         # 5. 为每个页面构建幻灯片
         for page_idx, editable_img in enumerate(editable_images):
