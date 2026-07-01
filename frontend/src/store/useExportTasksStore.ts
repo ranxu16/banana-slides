@@ -4,6 +4,7 @@ import * as api from '@/api/endpoints';
 import { devLog } from '@/utils/logger';
 import { getT } from '@/utils/i18nHelper';
 import { normalizeErrorMessage } from '@/utils';
+import type { ProjectOverridesSummary } from '@/types';
 
 const exportI18n = {
   zh: { exportStore: { exportFailed: '导出失败', pollFailed: '轮询失败' } },
@@ -61,6 +62,7 @@ export interface ExportTask {
     download_url?: string;
     filename?: string;
     config_source?: ExportConfigSource;
+    project_overrides?: ProjectOverridesSummary;
   };
   configSource?: ExportConfigSource;
   downloadUrl?: string;
@@ -120,6 +122,13 @@ export const formatConfigSourceSummary = (configSource?: ExportConfigSource): st
     return `${capability}: ${provider} / ${model}${suffix}`;
   })
 );
+
+export const formatProjectOverrideSummary = (projectOverrides?: ProjectOverridesSummary): string[] => {
+  if (!projectOverrides?.fields) return [];
+  return Object.values(projectOverrides.fields)
+    .filter((field) => field.explicit)
+    .map((field) => `${field.label}: ${field.value === true ? '开启' : field.value === false ? '关闭' : field.value ?? '未设置'}`);
+};
 
 const pollTimeouts = new Map<string, ReturnType<typeof setTimeout>>();
 

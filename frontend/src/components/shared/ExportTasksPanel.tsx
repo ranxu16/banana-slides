@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Download, X, Trash2, FileText, Clock, CheckCircle, XCircle, Loader2, AlertTriangle, HelpCircle, Settings, Film, FileSpreadsheet, Image } from 'lucide-react';
-import { formatConfigSourceSummary, useExportTasksStore, type ExportTask, type ExportTaskType } from '@/store/useExportTasksStore';
+import { formatConfigSourceSummary, formatProjectOverrideSummary, useExportTasksStore, type ExportTask, type ExportTaskType } from '@/store/useExportTasksStore';
 import { useT } from '@/hooks/useT';
 import type { Page } from '@/types';
 import { Button } from './Button';
@@ -20,6 +20,7 @@ const exportI18n = {
       styleExtractionFailed: "样式提取失败 ({{count}} 个)", textRenderFailed: "文本渲染失败 ({{count}} 个)",
       moreItems: "... 还有 {{count}} 条", exportFailed: "导出失败", preparing: "准备中...",
       configSource: "本次使用配置",
+      projectOverrides: "本次项目覆盖",
       settingsTip: "可在「项目覆盖项 → 导出覆盖」中调整配置或开启「返回半成品」选项",
       codexReconnectTip: "如果是 Codex 登录过期或连接中断，也可以前往设置重新登录 OpenAI 账号后再试",
       exportedFiles: "已导出文件",
@@ -41,6 +42,7 @@ const exportI18n = {
       styleExtractionFailed: "Style extraction failed ({{count}})", textRenderFailed: "Text render failed ({{count}})",
       moreItems: "... {{count}} more", exportFailed: "Export Failed", preparing: "Preparing...",
       configSource: "Configuration used",
+      projectOverrides: "Project overrides",
       settingsTip: "Adjust settings in \"Project Overrides → Export Overrides\" or enable \"Allow Partial Results\"",
       codexReconnectTip: "If Codex login expired or the connection was interrupted, reconnect your OpenAI account in Settings and try again.",
       exportedFiles: "Exported Files",
@@ -232,6 +234,7 @@ const TaskItem: React.FC<{ task: ExportTask; pages: Page[]; onRemove: () => void
   
   const hasWarnings = task.status === 'COMPLETED' && task.progress?.warnings && task.progress.warnings.length > 0;
   const configSourceSummary = formatConfigSourceSummary(task.configSource || task.progress?.config_source);
+  const projectOverrideSummary = formatProjectOverrideSummary(task.progress?.project_overrides);
 
   return (
     <div className="flex items-start gap-3 py-2.5 px-3 hover:bg-gray-50 dark:hover:bg-background-hover rounded-lg transition-colors">
@@ -342,6 +345,21 @@ const TaskItem: React.FC<{ task: ExportTask; pages: Page[]; onRemove: () => void
             <div className="space-y-1">
               {configSourceSummary.map((summary) => (
                 <div key={summary} className="truncate text-[11px] text-blue-700" title={summary}>
+                  {summary}
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {projectOverrideSummary.length > 0 && (
+          <div className="mt-2 rounded border border-amber-100 bg-amber-50 px-2 py-1.5">
+            <div className="mb-1 text-[11px] font-semibold text-amber-700">
+              {t('export.projectOverrides')}
+            </div>
+            <div className="space-y-1">
+              {projectOverrideSummary.map((summary) => (
+                <div key={summary} className="truncate text-[11px] text-amber-700" title={summary}>
                   {summary}
                 </div>
               ))}

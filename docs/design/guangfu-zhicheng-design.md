@@ -1427,3 +1427,13 @@ ui-guangfu-dashboard-redesign
 - 验证：`uv run --python 3.13 pytest backend/tests/unit/test_api_project.py::TestProjectGet -q` 通过，5 tests passed；`npm run guard:brand` 通过；`npx eslint src/components/shared/ProjectSettingsModal.tsx src/pages/SlidePreview.tsx src/api/endpoints.ts --ext ts,tsx --max-warnings 20` 通过但保留既有 `SlidePreview.tsx` 未用 `Home` import 警告。
 - 遗留：清除覆盖目前只清元数据，不改变项目字段存储值；如果后续要求“恢复全局默认值”，需要定义字段回填来源和与全局配置字段的映射。
 - 下一步：让导出任务读取项目覆盖元数据并把来源写入任务进度；随后在 resolver 层实现 `项目覆盖 > 个人配置 > 全局配置 > 系统默认` 的可验证优先级。
+
+### 2026-07-02 00:25 - 可编辑 PPTX 导出任务携带项目覆盖来源
+
+- 范围：`backend/controllers/export_controller.py`、`backend/tests/unit/test_export_editable_pptx_task.py`、`frontend/src/store/useExportTasksStore.ts`、`frontend/src/pages/ExportTasks.tsx`、`frontend/src/components/shared/ExportTasksPanel.tsx`、`docs/design/guangfu-zhicheng-design.md`。
+- 动作：可编辑 PPTX 导出任务创建时把 `project_overrides` 写入 task progress；导出任务中心和预览页导出任务浮层新增“本次项目覆盖”展示，仅展示显式项目覆盖字段；搜索范围同步包含项目覆盖摘要。
+- 结果：用户排查可编辑 PPTX 导出时，能同时看到 runtime 模型来源和本项目显式覆盖了哪些导出/画面字段。
+- 计划状态：导出任务来源展示已包含模型 runtime 与项目覆盖元数据；尚未把项目覆盖接入 AI runtime resolver 的模型/Provider 优先级。
+- 验证：`uv run --python 3.13 pytest backend/tests/unit/test_export_editable_pptx_task.py -k export_route_creates_pending_task_and_returns_task_id -q` 通过，1 test passed；`npm run guard:brand` 通过；`npx eslint src/store/useExportTasksStore.ts src/pages/ExportTasks.tsx src/components/shared/ExportTasksPanel.tsx --ext ts,tsx --max-warnings 20` 通过。
+- 遗留：普通 PPTX/PDF/视频等其他导出任务尚未统一写入项目覆盖摘要；项目覆盖目前主要覆盖导出策略/画面比例，不包含 AI 模型 Provider/Key。
+- 下一步：定义项目覆盖进入 resolver 的字段范围，优先让导出相关任务使用 `project_overrides` 标记来源；AI 模型项目级覆盖需要新增字段后再进入 resolver。

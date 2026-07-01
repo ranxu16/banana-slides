@@ -346,6 +346,7 @@ class TestExportEditablePptxTaskStatusTransition:
             assert task.status == "PENDING"
             assert task.task_type == "EXPORT_EDITABLE_PPTX"
             assert task.get_progress()['config_source']['visual']['provider'] == 'openai'
+            assert task.get_progress()['project_overrides']['fields']['image_aspect_ratio']['source'] == 'inherited_or_default'
 
         assert submit_task.call_args.kwargs['visual_ai_service'] is visual_service
 

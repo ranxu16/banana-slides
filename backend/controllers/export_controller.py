@@ -477,7 +477,8 @@ def export_editable_pptx(project_id):
         task.set_progress({
             'config_source': {
                 key: runtime.public_summary() for key, runtime in runtimes.items()
-            }
+            },
+            'project_overrides': project.to_dict().get('project_overrides'),
         })
         db.session.add(task)
         db.session.commit()

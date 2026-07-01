@@ -19,6 +19,7 @@ import {
 import { Button, Input } from '@/components/shared';
 import {
   formatConfigSourceSummary,
+  formatProjectOverrideSummary,
   useExportTasksStore,
   type ExportTask,
   type ExportTaskStatus,
@@ -142,6 +143,7 @@ const TaskRow: React.FC<{
   const progress = getProgressPercent(task);
   const latestMessage = getLatestMessage(task);
   const configSourceSummary = formatConfigSourceSummary(task.configSource || task.progress?.config_source);
+  const projectOverrideSummary = formatProjectOverrideSummary(task.progress?.project_overrides);
   const canDownload = task.status === 'COMPLETED' && Boolean(task.downloadUrl || task.progress?.download_url);
 
   return (
@@ -214,6 +216,19 @@ const TaskRow: React.FC<{
               <div className="flex flex-wrap gap-1.5">
                 {configSourceSummary.map((summary) => (
                   <span key={summary} className="rounded border border-blue-200 bg-white px-2 py-1">
+                    {summary}
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {projectOverrideSummary.length > 0 && (
+            <div className="mt-3 rounded-md border border-amber-100 bg-amber-50 px-3 py-2 text-xs text-amber-700">
+              <div className="mb-1 font-semibold text-amber-800">本次项目覆盖</div>
+              <div className="flex flex-wrap gap-1.5">
+                {projectOverrideSummary.map((summary) => (
+                  <span key={summary} className="rounded border border-amber-200 bg-white px-2 py-1">
                     {summary}
                   </span>
                 ))}
@@ -308,6 +323,7 @@ export const ExportTasks: React.FC = () => {
         task.errorMessage,
         getLatestMessage(task),
         ...formatConfigSourceSummary(task.configSource || task.progress?.config_source),
+        ...formatProjectOverrideSummary(task.progress?.project_overrides),
       ].filter(Boolean).join(' ').toLowerCase();
       return matchesStatus && matchesFormat && (!query || haystack.includes(query));
     });
