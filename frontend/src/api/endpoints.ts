@@ -93,7 +93,7 @@ export const deleteProject = async (projectId: string): Promise<ApiResponse> => 
  */
 export const updateProject = async (
   projectId: string,
-  data: Partial<Project>
+  data: Partial<Project> & { clear_project_overrides?: string[] }
 ): Promise<ApiResponse<Project>> => {
   const response = await apiClient.put<ApiResponse<Project>>(`/api/projects/${projectId}`, data);
   return response.data;

@@ -1445,7 +1445,22 @@ export const SlidePreview: React.FC = () => {
     } finally {
       setIsSavingAspectRatio(false);
     }
-  }, [currentProject, projectId, aspectRatio, syncProject, show]);
+  }, [currentProject, projectId, aspectRatio, syncProject, show, t]);
+
+  const handleClearProjectOverrides = useCallback(async (fields: string[]) => {
+    if (!currentProject || !projectId || fields.length === 0) return;
+
+    try {
+      await updateProject(projectId, { clear_project_overrides: fields });
+      await syncProject(projectId);
+      show({ message: '已恢复为继承或默认配置', type: 'success' });
+    } catch (error: any) {
+      show({
+        message: t('slidePreview.saveFailed', { error: error.message || t('slidePreview.unknownError') }),
+        type: 'error'
+      });
+    }
+  }, [currentProject, projectId, syncProject, show, t]);
 
   const handleTemplateSelect = async (templateFile: File | null, templateId?: string) => {
     if (!projectId) return;
@@ -2988,6 +3003,7 @@ export const SlidePreview: React.FC = () => {
             isSavingAspectRatio={isSavingAspectRatio}
             hasImages={hasImages}
             projectOverrides={currentProject?.project_overrides}
+            onClearProjectOverrides={handleClearProjectOverrides}
           />
         </>
       )}

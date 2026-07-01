@@ -1417,3 +1417,13 @@ ui-guangfu-dashboard-redesign
 - 验证：`uv run --python 3.13 pytest backend/tests/unit/test_api_project.py::TestProjectGet -q` 通过，5 tests passed；`npm run guard:brand` 通过；`npx eslint src/pages/Settings.tsx src/components/shared/ProjectSettingsModal.tsx src/types/index.ts --ext ts,tsx --max-warnings 20` 通过但保留既有 `CapabilityActionCard` 未使用警告。
 - 遗留：需要把 `clear_project_overrides` 接入 UI 操作；需要定义清除覆盖后的字段值回填策略；需要让 resolver/导出任务读取项目覆盖来源，并验证 `项目覆盖 > 个人配置 > 全局配置 > 系统默认`。
 - 下一步：先在项目设置弹窗增加“恢复为继承/默认”操作，调用 `clear_project_overrides`；再把导出任务进度和 effective config 来源接入项目覆盖优先级。
+
+### 2026-07-02 00:05 - 项目覆盖恢复继承操作接入
+
+- 范围：`frontend/src/components/shared/ProjectSettingsModal.tsx`、`frontend/src/pages/SlidePreview.tsx`、`frontend/src/api/endpoints.ts`、`docs/design/guangfu-zhicheng-design.md`。
+- 动作：项目设置弹窗中显式项目覆盖字段新增“恢复继承”按钮；预览页接入 `updateProject(..., { clear_project_overrides: [...] })` 并刷新项目；`updateProject` 请求类型允许 `clear_project_overrides`。
+- 结果：用户现在可以在项目设置中清除某个字段的显式覆盖元数据，字段会从“项目覆盖”回到“继承或默认”显示。
+- 计划状态：项目覆盖元数据、显式状态展示和恢复继承 UI 已完成第一片；尚未做清除覆盖后的字段值自动回填，也未进入 runtime resolver 优先级。
+- 验证：`uv run --python 3.13 pytest backend/tests/unit/test_api_project.py::TestProjectGet -q` 通过，5 tests passed；`npm run guard:brand` 通过；`npx eslint src/components/shared/ProjectSettingsModal.tsx src/pages/SlidePreview.tsx src/api/endpoints.ts --ext ts,tsx --max-warnings 20` 通过但保留既有 `SlidePreview.tsx` 未用 `Home` import 警告。
+- 遗留：清除覆盖目前只清元数据，不改变项目字段存储值；如果后续要求“恢复全局默认值”，需要定义字段回填来源和与全局配置字段的映射。
+- 下一步：让导出任务读取项目覆盖元数据并把来源写入任务进度；随后在 resolver 层实现 `项目覆盖 > 个人配置 > 全局配置 > 系统默认` 的可验证优先级。

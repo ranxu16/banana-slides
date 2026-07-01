@@ -17,6 +17,7 @@ const projectSettingsI18n = {
       inheritanceNotTracked: "暂未区分继承全局与显式覆盖",
       explicitOverride: "项目覆盖",
       inheritedOrDefault: "继承或默认",
+      restoreInherited: "恢复继承",
       globalConfigTitle: "全局设置", globalConfigDesc: "这些设置应用于所有项目",
       aspectRatio: "画面比例", aspectRatioDesc: "设置生成幻灯片图片的画面比例",
       aspectRatioLocked: "已生成图片的项目无法调整画面比例",
@@ -61,6 +62,7 @@ const projectSettingsI18n = {
       inheritanceNotTracked: "Inheritance vs explicit override is not tracked yet",
       explicitOverride: "Project Override",
       inheritedOrDefault: "Inherited or Default",
+      restoreInherited: "Restore Inheritance",
       globalConfigTitle: "Global Settings", globalConfigDesc: "These settings apply to all projects",
       aspectRatio: "Aspect Ratio", aspectRatioDesc: "Set the aspect ratio for generated slide images",
       aspectRatioLocked: "Cannot change aspect ratio after images have been generated",
@@ -127,6 +129,7 @@ interface ProjectSettingsModalProps {
   isSavingAspectRatio?: boolean;
   hasImages?: boolean;
   projectOverrides?: ProjectOverridesSummary;
+  onClearProjectOverrides?: (fields: string[]) => void;
 }
 
 type SettingsTab = 'project' | 'global' | 'export';
@@ -160,6 +163,7 @@ export const ProjectSettingsModal: React.FC<ProjectSettingsModalProps> = ({
   isSavingAspectRatio = false,
   hasImages = false,
   projectOverrides,
+  onClearProjectOverrides,
 }) => {
   const t = useT(projectSettingsI18n);
   const [activeTab, setActiveTab] = useState<SettingsTab>('project');
@@ -215,6 +219,15 @@ export const ProjectSettingsModal: React.FC<ProjectSettingsModalProps> = ({
               <div className="mt-1 truncate text-sm font-semibold text-gray-900" title={formatOverrideValue(field.value)}>
                 {formatOverrideValue(field.value)}
               </div>
+              {field.explicit && onClearProjectOverrides && (
+                <button
+                  type="button"
+                  onClick={() => onClearProjectOverrides([key])}
+                  className="mt-2 text-xs font-medium text-blue-700 hover:text-blue-900"
+                >
+                  {t('projectSettings.restoreInherited')}
+                </button>
+              )}
             </div>
           ))}
         </div>
