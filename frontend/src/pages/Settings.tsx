@@ -308,7 +308,7 @@ import { Button, Input, Loading, Modal, useToast, ToastContainer, useConfirm } f
 import * as api from '@/api/endpoints';
 import type { OutputLanguage, UpdateCheckInfo } from '@/api/endpoints';
 import { OUTPUT_LANGUAGE_OPTIONS } from '@/api/endpoints';
-import type { EffectiveSettings, PersonalSettings, Settings as SettingsType } from '@/types';
+import type { EffectiveSettings, PersonalSettings, Project, Settings as SettingsType } from '@/types';
 
 // 配置项类型定义
 type FieldType = 'text' | 'password' | 'number' | 'select' | 'buttons' | 'switch';
@@ -666,6 +666,7 @@ export const Settings: React.FC = () => {
   const [settings, setSettings] = useState<SettingsType | null>(null);
   const [personalSettings, setPersonalSettings] = useState<PersonalSettings | null>(null);
   const [effectiveSettings, setEffectiveSettings] = useState<EffectiveSettings | null>(null);
+  const [projectOverrideProjects, setProjectOverrideProjects] = useState<Project[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [formData, setFormData] = useState(initialFormData);
@@ -951,7 +952,7 @@ export const Settings: React.FC = () => {
   const loadSettings = async () => {
     setIsLoading(true);
     try {
-      const [settingsResponse, personalResponse, effectiveResponse] = await Promise.all([
+      const [settingsResponse, personalResponse, effectiveResponse, projectsResponse] = await Promise.all([
         api.getSettings(),
         api.getPersonalSettings().catch((error) => {
           console.warn('加载个人配置失败:', error);
@@ -959,6 +960,10 @@ export const Settings: React.FC = () => {
         }),
         api.getEffectiveSettings().catch((error) => {
           console.warn('加载生效配置失败:', error);
+          return null;
+        }),
+        api.listProjects(5).catch((error) => {
+          console.warn('加载项目覆盖摘要失败:', error);
           return null;
         }),
       ]);
@@ -969,6 +974,7 @@ export const Settings: React.FC = () => {
         const personalData = personalResponse?.data || null;
         setPersonalSettings(personalData);
         setEffectiveSettings(effectiveResponse?.data || null);
+        setProjectOverrideProjects(projectsResponse?.data?.projects || []);
         setPersonalConfig(prev => ({
           ...prev,
           mode: personalData?.force_global_default ? 'global' : 'auto',
@@ -1586,6 +1592,14 @@ export const Settings: React.FC = () => {
   const effectiveCapabilityList = effectiveSettings
     ? Object.values(effectiveSettings.capabilities)
     : [];
+  const formatProjectOverrideValue = (value: unknown) => {
+    if (typeof value === 'boolean') return value ? '开启' : '关闭';
+    if (value === null || value === undefined || value === '') return '未设置';
+    return String(value);
+  };
+  const projectOverrideCount = projectOverrideProjects.reduce((count, project) => (
+    count + Object.keys(project.project_overrides?.fields || {}).length
+  ), 0);
   const configNavItems = [
     { href: '#settings-api', label: '基础配置', description: '默认 Provider、Base URL、密钥' },
     { href: '#settings-models', label: 'AI 模型', description: '文本、图片、视觉理解模型' },
@@ -2536,10 +2550,64 @@ export const Settings: React.FC = () => {
         </div>
 
         <div id="settings-overrides" className="rounded-md border border-gray-200 bg-white p-5">
-          <h2 className="text-xl font-semibold text-gray-900 mb-2">项目覆盖</h2>
-          <p className="text-sm leading-6 text-gray-600">
-            全局配置是系统默认行为的唯一入口。项目内仅保留明确覆盖项，例如导出方法、是否允许半成品、视觉结构分析开关和画面比例。后续会在这里展示每个覆盖项的来源、当前值和回退链路。
-          </p>
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <h2 className="text-xl font-semibold text-gray-900 mb-2">项目覆盖</h2>
+              <p className="text-sm leading-6 text-gray-600">
+                全局配置是系统默认行为的唯一入口。项目内仅保留明确覆盖项，例如导出方法、是否允许半成品、视觉结构分析开关和画面比例。
+              </p>
+            </div>
+            <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-right">
+              <div className="text-xs font-medium text-amber-700">最近项目覆盖字段</div>
+              <div className="mt-1 text-2xl font-semibold text-amber-800">{projectOverrideCount}</div>
+            </div>
+          </div>
+
+          <div className="mt-4 rounded-md border border-blue-100 bg-blue-50 px-3 py-2 text-sm text-blue-700">
+            当前已能展示项目级覆盖字段和当前值；由于历史项目字段带默认值，暂未区分“继承全局默认”和“项目显式覆盖”。后续需要新增覆盖元数据后再开放恢复全局默认操作。
+          </div>
+
+          {projectOverrideProjects.length > 0 ? (
+            <div className="mt-4 space-y-3">
+              {projectOverrideProjects.map((project) => {
+                const fields = Object.entries(project.project_overrides?.fields || {});
+                return (
+                  <div key={project.project_id} className="rounded-md border border-gray-200 bg-gray-50 p-4">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <div>
+                        <div className="text-sm font-semibold text-gray-900">
+                          {project.project_title || project.idea_prompt || '未命名项目'}
+                        </div>
+                        <div className="mt-1 text-xs text-gray-500">项目 ID: {project.project_id}</div>
+                      </div>
+                      {project.project_overrides?.inheritance_tracking === false && (
+                        <span className="rounded-md border border-gray-200 bg-white px-2 py-1 text-xs text-gray-600">
+                          未启用继承追踪
+                        </span>
+                      )}
+                    </div>
+                    <div className="mt-3 grid gap-2 md:grid-cols-2 xl:grid-cols-3">
+                      {fields.map(([fieldKey, field]) => (
+                        <div key={fieldKey} className="rounded-md border border-gray-200 bg-white px-3 py-2">
+                          <div className="flex items-center justify-between gap-2">
+                            <span className="text-xs text-gray-500">{field.label}</span>
+                            <span className="text-[11px] text-gray-400">{field.group === 'export' ? '导出' : '项目'}</span>
+                          </div>
+                          <div className="mt-1 truncate text-sm font-semibold text-gray-900" title={formatProjectOverrideValue(field.value)}>
+                            {formatProjectOverrideValue(field.value)}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          ) : (
+            <div className="mt-4 rounded-md border border-dashed border-gray-300 bg-gray-50 p-6 text-center text-sm text-gray-500">
+              暂无最近项目。创建或打开项目后，这里会展示可覆盖字段摘要。
+            </div>
+          )}
         </div>
           </div>
         </div>

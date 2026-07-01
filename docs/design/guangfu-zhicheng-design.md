@@ -1397,3 +1397,13 @@ ui-guangfu-dashboard-redesign
 - 验证：`npm run guard:brand` 通过；`npx eslint src/components/shared/ProjectSettingsModal.tsx src/pages/SlidePreview.tsx --ext ts,tsx --max-warnings 20` 通过但保留既有 `SlidePreview.tsx` 未用 `Home` import 警告。
 - 遗留：还需要把项目覆盖摘要接到全局配置中心；真正的继承/恢复全局默认操作仍需新增项目 override 元数据存储。
 - 下一步：全局配置中心“项目覆盖”区接入最近项目/当前项目摘要，或先设计项目 override 元数据字段与迁移方案。
+
+### 2026-07-01 23:20 - 全局配置中心项目覆盖摘要展示
+
+- 范围：`frontend/src/pages/Settings.tsx`、`docs/design/guangfu-zhicheng-design.md`。
+- 动作：全局配置中心加载最近 5 个项目，并在“项目覆盖”区展示每个项目的 `project_overrides` 字段摘要、当前值、字段分组和继承追踪状态；原静态说明改为真实数据卡片，同时保留“历史字段暂未区分继承全局与显式覆盖”的限制提示。
+- 结果：全局配置中心不再只说明项目覆盖概念，用户可以直接看到最近项目有哪些项目级覆盖字段，以及当前画面比例、导出策略、视觉结构分析等值。
+- 计划状态：`project_overrides` 已接入后端契约、项目设置弹窗和全局配置中心；仍未实现真正的项目覆盖继承/恢复默认存储。
+- 验证：`npm run guard:brand` 通过；`npx eslint src/pages/Settings.tsx --ext ts,tsx --max-warnings 20` 通过但保留既有 `CapabilityActionCard` 未使用警告。
+- 遗留：最近项目摘要不能代表所有项目；全局配置中心后续可增加项目选择器或搜索；真正的“继承全局默认/项目显式覆盖/恢复默认”仍需新增 override 元数据字段与迁移。
+- 下一步：设计并实现项目 override 元数据存储，让项目字段能明确区分继承和显式覆盖，再接入 resolver 优先级。
