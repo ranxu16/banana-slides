@@ -882,3 +882,21 @@ ui-guangfu-dashboard-redesign
 - 验证：`npm run guard:brand` 通过；`npm run test:run -- src/tests/branding-workbench-regression.test.ts` 通过，2 tests passed；`npm run build` 通过；`git diff --check -- frontend/src/pages/Settings.tsx docs/design/guangfu-zhicheng-design.md` 通过；`rg` 检查页面渲染不再包含旧渐变容器、`Card` 包装、`useNavigate/useLocation` 或返回首页按钮。
 - 遗留：脏状态检测、离开页面拦截、字段级校验和项目覆盖真实来源链路仍未实现；“服务连接”目前仍在高级配置折叠区内，后续可拆为独立一级配置面板；翻译字典里仍保留少量旧 `系统设置/返回首页` 文案但不再渲染。
 - 下一步：阶段性提交本次全局配置中心前端改造；随后继续模板中心/素材中心一级页面，或回到后端配置/可编辑 PPTX 流水线 checkpoint。
+
+### 2026-07-01 10:40 - 模板与素材中心一级页面启动
+
+- 范围：`docs/design/mockups/materials-templates.md`、`frontend/src/App.tsx`、`frontend/src/api/endpoints.ts`、素材/模板相关共享组件。
+- 动作：读取模板与素材中心设计稿约束，扫描现有素材和用户模板 API、弹窗选择器、编辑页复用入口；确认本步骤只做 `/templates` 与 `/materials` 前端一级页面，不改素材/模板后端接口。
+- 结果：现有接口已支持全局素材列表、上传、删除、下载 zip，以及用户模板列表、上传、删除；一级路由目前仍是 AppShell 内占位页，需要替换为真实资源管理页面。
+- 验证：通过 `sed` 阅读设计稿和 `api/endpoints.ts` 相关接口，通过 `rg` 定位 `MaterialSelector`、`MaterialCenterModal`、`TemplateSelector` 等现有复用点。
+- 遗留：当前后端模板接口未提供“设为默认模板/最近使用/场景标签”字段；素材可见范围主要可由是否绑定 `project_id` 推断，团队/全局权限还需后端字段完善。
+- 下一步：新增 `Templates.tsx` 与 `Materials.tsx` 页面，替换 `/templates` 和 `/materials` 的占位路由，保留接口能力并明确未接字段的占位说明。
+
+### 2026-07-01 11:00 - 模板与素材中心一级页面完成
+
+- 范围：`frontend/src/pages/Templates.tsx`、`frontend/src/pages/Materials.tsx`、`frontend/src/App.tsx`、`docs/design/guangfu-zhicheng-design.md`。
+- 动作：新增模板中心页面，接入 `listUserTemplates/uploadUserTemplate/deleteUserTemplate`，支持搜索、场景筛选、上传、删除、缩略图懒加载、空状态和统计卡；新增素材中心页面，接入 `listMaterials/uploadMaterial/deleteMaterial/downloadMaterialsZip`，支持搜索、类型筛选、可见范围筛选、上传、删除、批量下载、缩略图懒加载、空状态和统计卡；将 `/templates`、`/materials` 从占位路由切换为真实页面，并删除 `App.tsx` 中已无使用的 `PlaceholderPage`。
+- 结果：模板中心与素材中心不再只是一级菜单占位；素材卡片展示图片/图标/图表推断类型和全局/项目素材范围；模板卡片展示缩略图、名称、更新时间和光伏场景标签；未接入的“使用/设为默认”以禁用按钮明确保留位置。
+- 验证：`npm run guard:brand` 通过；`npm run test:run -- src/tests/branding-workbench-regression.test.ts` 通过，2 tests passed；`npm run build` 通过；`git diff --check -- frontend/src/App.tsx frontend/src/pages/Templates.tsx frontend/src/pages/Materials.tsx docs/design/guangfu-zhicheng-design.md` 通过；`rg` 检查 `App.tsx` 与新增页面中不再包含模板/素材占位文案。
+- 遗留：模板“使用/设为默认”、最近使用、场景标签仍需后端字段与跨页面动作支持；素材“使用”需要结合编辑页上下文选择器接入；团队可见范围还没有后端字段，目前仅能区分全局和项目素材。
+- 下一步：阶段性提交模板与素材中心前端改造；随后可继续编辑/预览页外壳统一，或回到后端可编辑 PPTX 流水线与 OpenAI 默认配置 checkpoint。
