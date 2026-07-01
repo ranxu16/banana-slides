@@ -29,7 +29,7 @@ __all__ = [
     'TextProvider', 'GenAITextProvider', 'OpenAITextProvider', 'AnthropicTextProvider', 'LazyLLMTextProvider', 'CodexTextProvider',
     'ImageProvider', 'GenAIImageProvider', 'OpenAIImageProvider', 'AnthropicImageProvider', 'LazyLLMImageProvider', 'CodexImageProvider',
     'get_text_provider', 'get_image_provider', 'get_provider_format',
-    'get_caption_provider', 'get_image_caption_provider_config', 'LAZYLLM_VENDORS',
+    'get_caption_provider', 'get_image_caption_provider_config', 'create_text_provider', 'LAZYLLM_VENDORS',
 ]
 
 # LazyLLM vendor names (used to distinguish from gemini/openai formats)
@@ -356,9 +356,8 @@ def get_caption_provider(model: str = "gpt-5.5") -> TextProvider:
         return GenAITextProvider(api_key=config['api_key'], api_base=config['api_base'], model=model)
 
 
-def get_text_provider(model: str = "gpt-5.5") -> TextProvider:
-    """Factory: return the appropriate text-generation provider."""
-    config = _get_model_type_provider_config('text')
+def create_text_provider(config: Dict[str, Any], model: str = "gpt-5.5") -> TextProvider:
+    """Create a text provider from an explicit, request-scoped config."""
     fmt = config['format']
 
     if fmt == 'anthropic':
@@ -384,6 +383,11 @@ def get_text_provider(model: str = "gpt-5.5") -> TextProvider:
         # gemini (default)
         logger.info("Text provider: Gemini, model=%s", model)
         return GenAITextProvider(api_key=config['api_key'], api_base=config['api_base'], model=model)
+
+
+def get_text_provider(model: str = "gpt-5.5") -> TextProvider:
+    """Factory: return the text provider configured through global settings."""
+    return create_text_provider(_get_model_type_provider_config('text'), model=model)
 
 
 def get_image_provider(model: str = "gpt-image-2") -> ImageProvider:

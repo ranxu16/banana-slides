@@ -330,7 +330,16 @@ class TestProjectOutlineStream:
                 }
                 yield {'__stream_complete__': True}
 
-        monkeypatch.setattr('controllers.project_controller.get_ai_service', lambda: FakeAIService())
+        runtime_calls = []
+
+        def fake_runtime_service(capability, user):
+            runtime_calls.append((capability, user.username))
+            return object(), FakeAIService()
+
+        monkeypatch.setattr(
+            'controllers.project_controller.resolve_user_ai_runtime',
+            fake_runtime_service,
+        )
 
         stream_response = client.post(
             f'/api/projects/{project_id}/generate/outline/stream',
@@ -343,6 +352,7 @@ class TestProjectOutlineStream:
         assert 'event: page' in body
         assert 'description_text' in body
         assert 'event: done' in body
+        assert runtime_calls == [('outline', 'test-admin')]
 
         with app.app_context():
             from models import Page, Project

@@ -122,6 +122,100 @@ def _capability_use_personal(
     return not use_global_default, use_global_default
 
 
+def _runtime_value(
+    field: str,
+    global_settings: Settings,
+    personal_settings: UserSettings | None,
+    use_personal: bool,
+):
+    if use_personal and personal_settings:
+        personal_value = getattr(personal_settings, field, None)
+        if _has_value(personal_value):
+            return personal_value, "personal"
+
+    global_value = getattr(global_settings, field, None)
+    if _has_value(global_value):
+        return global_value, "global"
+
+    default_value = Settings._get_config_defaults().get(field)
+    return default_value, "system_default"
+
+
+def resolve_capability_runtime_config(capability: str, user=None) -> dict[str, Any]:
+    """Return the secret-bearing effective config for an internal capability call."""
+    route = CAPABILITY_ROUTES.get(capability)
+    if not route:
+        raise ValueError(f"Unknown capability: {capability}")
+
+    global_settings = Settings.get_settings()
+    personal_settings = getattr(user, "settings", None) if user else None
+    use_personal, use_global_default = _capability_use_personal(capability, personal_settings)
+
+    provider, provider_source = _runtime_value(
+        route.source_field, global_settings, personal_settings, use_personal
+    )
+    if not _has_value(provider):
+        provider, provider_source = _runtime_value(
+            "ai_provider_format", global_settings, personal_settings, use_personal
+        )
+
+    model, model_source = _runtime_value(
+        route.model_field, global_settings, personal_settings, use_personal
+    )
+    api_key, credential_source = _runtime_value(
+        route.key_field, global_settings, personal_settings, use_personal
+    )
+    if not _has_value(api_key):
+        api_key, credential_source = _runtime_value(
+            "api_key", global_settings, personal_settings, use_personal
+        )
+    api_base_url, base_source = _runtime_value(
+        route.base_field, global_settings, personal_settings, use_personal
+    )
+    if not _has_value(api_base_url):
+        api_base_url, base_source = _runtime_value(
+            "api_base_url", global_settings, personal_settings, use_personal
+        )
+
+    provider_name = str(provider or "").lower()
+    account_identity = None
+    if provider_name == "codex":
+        api_key = global_settings.get_openai_oauth_token()
+        credential_source = "account"
+        account_identity = global_settings.openai_oauth_account_id
+    lazyllm_api_keys = {}
+    if provider_name in LAZYLLM_VENDORS:
+        if use_personal and personal_settings:
+            lazyllm_api_keys = personal_settings.get_lazyllm_api_keys_dict()
+        if not lazyllm_api_keys.get(provider_name):
+            lazyllm_api_keys = global_settings.get_lazyllm_api_keys_dict()
+
+    runtime = {
+        "ai_provider_format": provider,
+        route.source_field: provider,
+        route.model_field: model,
+        route.key_field: api_key,
+        route.base_field: api_base_url,
+        "_effective_source": {
+            "capability": capability,
+            "use_global_default": use_global_default,
+            "provider": provider_source,
+            "model": model_source,
+            "credential": credential_source,
+            "api_base_url": base_source,
+        },
+        "_account_identity": account_identity,
+    }
+    if lazyllm_api_keys:
+        runtime["lazyllm_api_keys"] = lazyllm_api_keys
+    if capability in {"image_generation", "editable_pptx_element"}:
+        protocol, _ = _runtime_value(
+            "openai_image_api_protocol", global_settings, personal_settings, use_personal
+        )
+        runtime["openai_image_api_protocol"] = protocol or "auto"
+    return {key: value for key, value in runtime.items() if value is not None}
+
+
 def resolve_effective_settings(user=None) -> dict[str, Any]:
     global_settings = Settings.get_settings()
     global_dict = global_settings.to_dict()

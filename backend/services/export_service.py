@@ -1866,6 +1866,8 @@ class ExportService:
                         }
             return ExportService._apply_pixel_text_color_fallback({}, element_context)
 
+        total_pages = len(editable_images)
+
         # 同时启动两个任务线程
         report_progress("并行分析", f"同步执行文本样式提取与视觉结构分析（{total_pages} 页）...", 40)
         _t_vis = _threading.Thread(target=_run_visual_structure_analysis, daemon=True)
@@ -1910,7 +1912,6 @@ class ExportService:
         visual_ai_service = _get_visual_ai_service()
         
         # 5. 为每个页面构建幻灯片
-        total_pages = len(editable_images)
         for page_idx, editable_img in enumerate(editable_images):
             # 构建PPTX占 75% - 95% 的进度
             percent = 75 + int(20 * page_idx / total_pages)

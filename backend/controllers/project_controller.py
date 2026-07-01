@@ -19,6 +19,7 @@ from werkzeug.utils import secure_filename
 from models import db, Project, Page, Task, ReferenceFile
 from services import ProjectContext, FileService
 from services.ai_service_manager import get_ai_service
+from services.ai_runtime import resolve_user_ai_runtime
 from services.task_manager import (
     task_manager,
     generate_descriptions_task,
@@ -468,8 +469,7 @@ def generate_outline(project_id):
         if err:
             return err
         
-        # Get singleton AI service instance
-        ai_service = get_ai_service()
+        runtime, ai_service = resolve_user_ai_runtime('outline', get_current_user())
         
         # Get request data and language parameter
         data = request.get_json() or {}
@@ -563,13 +563,13 @@ def generate_outline_stream(project_id):
 
     # Capture app reference for use inside the generator (which runs outside request context)
     app = current_app._get_current_object()
+    runtime, ai_service = resolve_user_ai_runtime('outline', get_current_user())
 
     def sse_generate():
         with app.app_context():
             try:
                 # Re-fetch project inside app context to attach to this session
                 proj = db.session.get(Project, project_id)
-                ai_service = get_ai_service()
                 reference_files_content = _get_project_reference_files_content(project_id)
 
                 # Validate input based on creation type
@@ -698,8 +698,7 @@ def generate_from_description(project_id):
         
         project.description_text = description_text
         
-        # Get singleton AI service instance
-        ai_service = get_ai_service()
+        runtime, ai_service = resolve_user_ai_runtime('description', get_current_user())
         
         # Get reference files content and create project context
         reference_files_content = _get_project_reference_files_content(project_id)
@@ -815,6 +814,7 @@ def generate_descriptions(project_id):
         max_workers = data.get('max_workers', current_app.config.get('MAX_DESCRIPTION_WORKERS', 5))
         language = data.get('language', current_app.config.get('OUTPUT_LANGUAGE', 'zh'))
         detail_level = data.get('detail_level', 'default')
+        runtime, ai_service = resolve_user_ai_runtime('description', get_current_user())
         
         # Create task
         task = Task(
@@ -825,14 +825,12 @@ def generate_descriptions(project_id):
         task.set_progress({
             'total': len(pages),
             'completed': 0,
-            'failed': 0
+            'failed': 0,
+            'config_source': runtime.public_summary(),
         })
         
         db.session.add(task)
         db.session.commit()
-        
-        # Get singleton AI service instance
-        ai_service = get_ai_service()
         
         # Get reference files content and create project context
         reference_files_content = _get_project_reference_files_content(project_id)
@@ -896,12 +894,12 @@ def generate_descriptions_stream(project_id):
     detail_level = data.get('detail_level', 'default')
 
     app = current_app._get_current_object()
+    runtime, ai_service = resolve_user_ai_runtime('description', get_current_user())
 
     def sse_generate():
         with app.app_context():
             try:
                 proj = db.session.get(Project, project_id)
-                ai_service = get_ai_service()
                 reference_files_content = _get_project_reference_files_content(project_id)
                 project_context = ProjectContext(proj, reference_files_content)
 
@@ -1082,7 +1080,6 @@ def generate_images(project_id):
         db.session.add(task)
         db.session.commit()
         
-        # Get singleton AI service instance
         ai_service = get_ai_service()
         
         # 合并额外要求和风格描述
@@ -1198,8 +1195,7 @@ def refine_outline(project_id):
         else:
             current_outline = _reconstruct_outline_from_pages(pages)
         
-        # Get singleton AI service instance
-        ai_service = get_ai_service()
+        runtime, ai_service = resolve_user_ai_runtime('natural_edit', get_current_user())
         
         # Get reference files content and create project context
         reference_files_content = _get_project_reference_files_content(project_id)
@@ -1310,8 +1306,7 @@ def refine_descriptions(project_id):
                 'description_content': desc_content if desc_content else ''
             })
         
-        # Get singleton AI service instance
-        ai_service = get_ai_service()
+        runtime, ai_service = resolve_user_ai_runtime('natural_edit', get_current_user())
         
         # Get reference files content and create project context
         reference_files_content = _get_project_reference_files_content(project_id)

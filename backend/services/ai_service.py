@@ -81,7 +81,8 @@ class ProjectContext:
 class AIService:
     """Service for AI model interactions using pluggable providers"""
     
-    def __init__(self, text_provider: TextProvider = None, image_provider: ImageProvider = None, caption_provider: TextProvider = None):
+    def __init__(self, text_provider: TextProvider = None, image_provider: ImageProvider = None,
+                 caption_provider: TextProvider = None, initialize_missing_providers: bool = True):
         """
         Initialize AI service with providers
         
@@ -121,9 +122,15 @@ class AIService:
             self.caption_model = config.IMAGE_CAPTION_MODEL
 
         # Use provided providers or create from factory based on AI_PROVIDER_FORMAT (from Flask config or env var)
-        self.text_provider = text_provider or get_text_provider(model=self.text_model)
-        self.image_provider = image_provider or get_image_provider(model=self.image_model)
-        self.caption_provider = caption_provider or get_caption_provider(model=self.caption_model)
+        self.text_provider = text_provider or (
+            get_text_provider(model=self.text_model) if initialize_missing_providers else None
+        )
+        self.image_provider = image_provider or (
+            get_image_provider(model=self.image_model) if initialize_missing_providers else None
+        )
+        self.caption_provider = caption_provider or (
+            get_caption_provider(model=self.caption_model) if initialize_missing_providers else None
+        )
     
     def _get_text_thinking_budget(self) -> int:
         """

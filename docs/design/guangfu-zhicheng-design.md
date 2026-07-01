@@ -788,7 +788,7 @@ ui-guangfu-dashboard-redesign
 
 ## 14.1 当前状态快照
 
-截至 2026-07-01 14:45，当前改造状态如下。
+截至 2026-07-01 18:05，当前改造状态如下。
 
 已完成：
 
@@ -800,31 +800,34 @@ ui-guangfu-dashboard-redesign
 - 全局配置中心前端 V2：`全局默认配置 / 个人配置` 二级入口。
 - 个人配置页已与全局配置页同构展示：基础配置、AI 模型、生成策略、文件解析、服务连接、兼容高级、服务测试、覆盖链路。
 - Codex 在前端可选择；未连接账号时显示“需连接账号”，不再禁用选项。
+- 用户级个人配置 schema/API 第一片：读取、保存、重置、敏感值脱敏。
+- `force_global_default` 与能力级 `use_global_default` 已持久化并参与解析。
+- effective config resolver 第一片，可返回逐能力来源、执行方式、可用状态和不可用原因。
+- 个人配置页已接入后端读写，并展示 resolver 返回的能力矩阵。
+- 可编辑 PPTX 已形成“GPT 视觉结构分析 -> `gpt-image-2` 独立元素生成 -> PPTX 拼装”的流水线骨架。
+- 文本模型、图片识别、图片生成三类服务测试已接入 effective config，未保存表单值作为最高优先级临时覆盖，并记录非敏感配置来源。
+- 大纲生成、页面描述和文本自然语言修改的主要同步、流式与后台任务入口已接入请求级 `AIRuntimeConfig`。
 
 部分完成：
 
-- 全局配置前端继续复用现有 `getSettings/updateSettings/resetSettings/test*` 能力。
-- 个人配置前端已有入口、表单结构和回退交互，但仍是前端展示/预览状态。
-- 能力接入方式已进入设计稿和 UI 提示，但后端尚未返回逐能力 `ready/reason`。
+- resolver 已覆盖全局与个人层，项目覆盖层尚未接入。
+- Codex / ChatGPT 连接状态已返回，但仍复用全局 OAuth，尚未做到用户级账号隔离。
+- 可编辑 PPTX 流水线已有结构分析与元素生成实现，仍缺真实样例端到端视觉比对和自动校正闭环。
 
 未完成且必须进入后续计划：
 
-- 用户级个人配置 API。
-- 个人配置保存、重置、读取。
-- 个人 API Key 加密存储和脱敏展示。
-- `force_global_default` 后端生效。
-- 能力级继承全局默认。
-- 配置 resolver。
-- Codex / ChatGPT 账号连接能力状态和不可用原因。
+- 个人 API Key 加密存储；当前已脱敏展示，但数据库字段仍需加密。
+- 用户级 Codex / ChatGPT OAuth 隔离与授权范围管理。
 - 大纲、描述、自然语言修改、图片生成、可编辑 PPTX、导出任务等业务调用点接入 resolver。
 - 项目覆盖与个人配置的来源展示和优先级验证。
+- 可编辑 PPTX 真实样例端到端视觉对比、差异量化与自动校正。
 
 下一阶段建议顺序：
 
-1. 先实现 Phase 6 的后端 schema/API/resolver，不继续堆 UI。
-2. 再把设置页个人配置保存接到后端。
-3. 再逐个接入生成工作流：大纲/描述 → 图片生成 → 可编辑 PPTX → 导出任务。
-4. 最后补来源展示、服务测试、端到端回归和截图验收。
+1. 先实现请求/任务级 `AIRuntimeConfig` 与按 Provider、模型、API Base、凭据指纹隔离的 Provider 缓存。
+2. 进入 Phase 7，逐个接入生成工作流：大纲/描述/自然语言修改 -> 图片生成 -> 可编辑 PPTX -> 导出任务。
+3. 补项目覆盖层、任务配置来源摘要和真实失败原因展示。
+4. 最后完成个人密钥加密、用户级 OAuth 隔离，以及可编辑 PPTX 端到端视觉校正验收。
 
 ## 15. 执行记录与进展同步规则
 
@@ -1206,3 +1209,82 @@ ui-guangfu-dashboard-redesign
 - 验证：`npm run guard:brand` 通过；`npm run test:run -- src/tests/branding-workbench-regression.test.ts` 通过，2 tests passed；`npm run build` 通过；`python3 -m py_compile backend/models/user_settings.py backend/controllers/auth_controller.py backend/controllers/settings_controller.py backend/services/settings_resolver.py` 通过；`uv run --python 3.13 pytest backend/tests/unit/test_personal_settings_effective_config.py -q` 通过，3 tests passed；`uv run --python 3.13 pytest backend/tests/unit/test_api_settings_provider.py backend/tests/unit/test_personal_settings_effective_config.py -q` 通过，13 tests passed；`uv run --python 3.13 alembic heads` 返回 `021_expand_user_settings_config (head)`；`git diff --check` 通过。
 - 遗留：个人 API Key 加密存储仍未做；个人 OAuth/Codex 登录态仍复用全局 OAuth，不是用户级隔离；服务测试仍是表单临时覆盖，没有统一走 resolver；生成大纲/描述/自然语言修改、图片生成、可编辑 PPTX、导出任务队列还没接入 resolver；工作区仍存在之前可编辑 PPTX 流水线相关未提交改动，本轮未回滚。
 - 下一步：建议先做“服务测试接入 effective config”，让设置页验证结果和实际生效链路一致；之后进入 Phase 7，把大纲/描述/自然语言修改和 PPTX/图片/导出工作流逐步切到 resolver。
+
+### 2026-07-01 17:05 - 当前状态快照校准完成
+
+- 范围：`docs/design/guangfu-zhicheng-design.md`。
+- 动作：对照当前分支提交与 Phase 6 执行记录，修正 14.1 中停留在 14:45 的旧状态，避免后续继续按“个人配置 API/resolver 尚未实现”的过期计划执行。
+- 结果：状态快照已登记个人配置 schema/API、保存/重置、`force_global_default`、能力级继承、effective resolver、前端能力矩阵和可编辑 PPTX 流水线骨架的完成状态；未完成项收敛为服务测试接 resolver、Phase 7 工作流接入、项目覆盖、密钥加密、用户级 OAuth 和视觉校正验收。
+- 计划状态：已完成状态快照校准；进行中“服务测试接入 effective config”；待开始 Phase 7 生成/导出工作流接入。
+- 验证：`git diff --check -- docs/design/guangfu-zhicheng-design.md` 通过；人工对照提交 `e4b9ed8`、`7f2f25b` 与 15:25 至 16:25 的执行记录。
+- 遗留：本步骤只校准文档，没有修改业务代码。
+- 下一步：扩展 resolver 提供运行时能力配置，让设置页服务测试以当前用户的 effective config 为基础，并保留未保存表单值作为最高优先级临时覆盖。
+
+### 2026-07-01 17:30 - 服务测试接入 effective config 完成
+
+- 范围：`backend/services/settings_resolver.py`、`backend/controllers/settings_controller.py`、`backend/tests/unit/test_personal_settings_effective_config.py`、`docs/design/guangfu-zhicheng-design.md`。
+- 动作：新增内部专用 `resolve_capability_runtime_config`，在不进入接口响应和任务记录明文的前提下解析能力运行所需的模型、Provider、API Base、密钥和 LazyLLM vendor key；把文本模型、图片识别、图片生成服务测试分别映射到 `outline`、`image_caption`、`image_generation`；保留前端未保存表单值作为 resolver 结果之上的临时覆盖；测试任务结果记录非敏感 `config_source` 摘要，并把被表单临时覆盖的来源标记为 `request_override`；临时覆盖上下文补充 LazyLLM 环境变量的设置与恢复。
+- 结果：个人配置、`force_global_default` 和能力级继承现在会真实影响三类模型服务测试；测试结果可追溯 Provider、模型、凭据和 Base URL 的来源层，但不会写入密钥；OCR、MinerU、百度修复等非模型服务继续使用对应全局服务配置。
+- 用户可见变化：个人配置页触发模型测试时，后台实际测试当前用户生效配置；用户尚未保存的表单修改仍可立即测试，不需要先保存。
+- 保留逻辑：Codex 401/OAuth 失效自动断开、异步任务轮询、现有测试函数、全局非模型服务配置均保留；Codex 失败记录现在同时保留 `config_source`。
+- 计划状态：已完成“服务测试改为基于 effective config 的当前生效配置”；待开始 Phase 7 生成/导出工作流接入 resolver。
+- 验证：`python3 -m py_compile backend/services/settings_resolver.py backend/controllers/settings_controller.py backend/tests/unit/test_personal_settings_effective_config.py` 通过；`uv run --python 3.13 pytest backend/tests/unit/test_personal_settings_effective_config.py backend/tests/unit/test_api_settings_provider.py -q` 通过，15 tests passed；`git diff --check` 通过。
+- 问题处理：新增运行时 resolver 单测首次失败，因为测试只请求 `app` fixture、未创建管理员用户；改为同时使用 `client` fixture 并读取 `test-admin` 后通过。该问题只影响测试准备，不影响业务代码。
+- 遗留：`verify_api_key` 旧同步验证接口仍只面向全局管理员配置；Phase 7 生成/导出任务尚未使用 runtime resolver；项目覆盖、个人密钥加密和用户级 OAuth 尚未完成。
+- 下一步：进入 Phase 7 第一片，优先将大纲生成、页面描述和自然语言修改三个文本能力接入 `resolve_capability_runtime_config`，并给任务记录增加非敏感配置来源摘要。
+
+### 2026-07-01 17:50 - Phase 7 文本生成调用链盘点完成
+
+- 范围：`backend/controllers/project_controller.py`、`backend/controllers/page_controller.py`、`backend/services/task_manager.py`、`backend/services/ai_service.py`、`backend/services/ai_service_manager.py`、`backend/services/ai_providers/`、`docs/design/guangfu-zhicheng-design.md`。
+- 动作：定位大纲生成、流式大纲、从描述生成、单页描述、批量描述、流式描述、优化大纲和优化描述的控制器/后台任务入口；检查 AIService 构造、Provider 工厂和缓存键的配置读取方式。
+- 结果：文本能力入口已完整定位，但不能直接复用服务测试的 `temporary_settings_override`。当前 AIService 从全局 `app.config` 取模型和 Provider 配置，`ai_service_manager` 的 Provider 缓存仅按模型名建键；若在多用户生成任务中临时改全局配置，可能并发串用 Provider/API Key，同模型不同用户也可能复用错误凭据。
+- 接入约束：Phase 7 必须先新增请求/任务级 AI 运行上下文，让 Provider 工厂显式接收 runtime config；Provider 缓存键至少包含能力、Provider、模型、API Base、凭据指纹和账号连接身份，且任务记录只保存非敏感来源摘要，不保存密钥。
+- 计划状态：已完成 Phase 7 文本调用链盘点；待开始“请求/任务级 AI runtime context 与隔离缓存”；其后再接大纲、描述和自然语言修改入口。
+- 验证：通过 `rg`/`sed` 对照 `generate_outline`、`generate_outline_stream`、`generate_from_description`、`generate_descriptions_task`、`generate_page_description`、`refine_outline`、`refine_descriptions`、`AIService.__init__`、`get_ai_service` 和三类 Provider cache。
+- 遗留：本步骤只完成架构盘点，没有修改生成业务调用；服务测试仍使用短生命周期临时覆盖，适用于当前主动触发的测试任务，但不能作为多用户生成流水线的最终实现。
+- 下一步：实现独立于全局 `app.config` 的 `AIRuntimeConfig`/Provider 构造入口和带凭据指纹的隔离缓存，再接入大纲、描述、自然语言修改三个文本能力。
+
+### 2026-07-01 18:05 - 完整改造计划复核与状态快照修正
+
+- 范围：`docs/design/guangfu-zhicheng-design.md`、当前分支提交与工作区改动。
+- 动作：按 Phase 1 至 Phase 7、配置后端链路、可编辑 PPTX 流水线和最近执行记录重新核对完整计划；修正 14.1 中仍将服务测试 effective config 接入列为未完成的过期状态。
+- 结果：状态快照已确认服务测试接入完成；下一步前置项明确为请求/任务级 `AIRuntimeConfig` 和隔离 Provider 缓存，之后再按文本能力、图片能力、可编辑 PPTX、导出任务顺序接入 resolver。
+- 计划状态：Phase 1 至 Phase 5 为首轮完成或部分完成；Phase 6 第一片完成但项目覆盖、密钥加密和用户级 OAuth 未完成；Phase 7 仅完成调用链盘点，生成业务尚未接入。
+- 验证：对照 `git log --oneline`、`git status --short`、Phase 6/7 代码入口和 17:30/17:50 执行记录；`git diff --check -- docs/design/guangfu-zhicheng-design.md` 通过。
+- 遗留：用户管理页是否达到最终高保真验收、所有首轮前端页面的 3012 桌面/移动截图验收仍需单独复核；当前服务测试/runtime resolver 改动尚未提交。
+- 下一步：实现请求级 AI runtime config 与安全隔离缓存，并补单元测试覆盖同模型、不同用户密钥不会复用 Provider。
+
+### 2026-07-01 18:35 - AIRuntimeConfig 与文本 Provider 隔离缓存底座完成
+
+- 范围：`backend/services/ai_runtime.py`、`backend/services/ai_providers/__init__.py`、`backend/services/ai_service.py`、`backend/services/ai_service_manager.py`、`backend/services/settings_resolver.py`、`backend/tests/unit/test_ai_runtime_isolation.py`、`docs/design/guangfu-zhicheng-design.md`。
+- 动作：新增不可变 `AIRuntimeConfig`，将能力、Provider、模型、API Base、凭据、账号身份和非敏感来源摘要封装为请求/任务级运行配置；新增显式 `create_text_provider(config, model)` 工厂；AIService 支持只初始化传入的 Provider；新增 runtime 文本 Provider 缓存和 `get_runtime_ai_service`；Codex runtime 解析真实 OAuth token 与账号身份，但不进入公开摘要。
+- 缓存隔离：runtime 缓存键包含能力、Provider、模型、API Base、凭据 SHA-256 短指纹和账号身份；密钥不进入 `repr`、公开摘要或缓存键明文；相同模型但不同用户密钥不会复用 Provider，完全相同运行配置才复用。
+- 兼容性：原 `get_ai_service()` 和全局 Provider 工厂保持不变，旧生成链路尚未切换；新的 runtime 路径不修改全局 `app.config`。
+- 限制：LazyLLM 当前通过全局 namespace/环境变量读取密钥，尚不具备可靠的用户级并发隔离；runtime 路径会明确拒绝个人 LazyLLM 配置，不会静默借用全局密钥。后续需为 LazyLLM 增加显式凭据适配器后再开放。
+- 计划状态：已完成请求/任务级 `AIRuntimeConfig` 与 OpenAI/Gemini/Codex 等文本 Provider 隔离缓存底座；进行中大纲、页面描述、自然语言修改接入。
+- 验证：`python3 -m py_compile backend/services/ai_runtime.py backend/services/ai_providers/__init__.py backend/services/ai_service.py backend/services/ai_service_manager.py backend/services/settings_resolver.py backend/tests/unit/test_ai_runtime_isolation.py` 通过；`uv run --python 3.13 pytest backend/tests/unit/test_ai_runtime_isolation.py backend/tests/unit/test_personal_settings_effective_config.py backend/tests/unit/test_api_settings_provider.py -q` 通过，19 tests passed。
+- 遗留：runtime 目前只支持文本 AIService；图片和视觉 Provider 仍待后续扩展；生成控制器和后台任务尚未接入；任务来源摘要尚未写入业务任务。
+- 下一步：新增“按用户解析文本 runtime 并构造 AIService”的统一 helper，接入大纲、描述和自然语言修改入口，同时避免 SSE/后台线程丢失用户上下文。
+
+### 2026-07-01 19:05 - Phase 7 文本能力第一片接入完成
+
+- 范围：`backend/services/ai_runtime.py`、`backend/controllers/project_controller.py`、`backend/controllers/page_controller.py`、`backend/tests/unit/test_api_project.py`、`backend/tests/unit/test_ai_runtime_isolation.py`、`docs/design/guangfu-zhicheng-design.md`。
+- 动作：新增 `resolve_user_ai_runtime` 统一入口；将同步大纲、流式大纲、从描述生成、单页描述、批量描述、流式描述、优化大纲和优化描述切换为当前用户 effective config + 隔离 Provider；SSE 在请求上下文结束前解析并捕获 runtime/service；批量描述任务在落库前完成 runtime 校验，并记录 `runtime.public_summary()`。
+- 结果：个人文本模型、Provider、API Base、API Key、`force_global_default` 和能力级继承开始真实影响大纲、描述和文本自然语言修改；后台描述任务记录能力、Provider、模型、Base、凭据指纹和来源层，不记录密钥；runtime 配置失败不会留下孤立 PENDING 任务。
+- 兼容性：图片生成、页面图片编辑、翻修、语音等非本片入口继续使用原全局 AIService；全局 LazyLLM 继续走原全局 service，不受本片影响；个人 LazyLLM 因 namespace/环境变量无法并发隔离而返回明确错误，不静默使用全局凭据。
+- 测试修正：流式大纲单测原先 mock `get_ai_service`，接线后实际调用了 runtime Provider；测试已改为 mock `resolve_user_ai_runtime`，并断言使用 `outline` 能力和当前 `test-admin` 用户。
+- 计划状态：已完成 Phase 7 文本能力第一片；进行中更大范围后端回归；待开始图片/视觉 runtime、可编辑 PPTX 和导出任务接入。
+- 验证：`python3 -m py_compile` 覆盖 runtime、Provider、AIService、resolver、项目/页面控制器并通过；`uv run --python 3.13 pytest backend/tests/unit/test_api_project.py backend/tests/unit/test_ai_runtime_isolation.py backend/tests/unit/test_personal_settings_effective_config.py backend/tests/unit/test_api_settings_provider.py -q` 通过，37 tests passed；`git diff --check` 通过。
+- 遗留：同步与 SSE 操作没有独立 Task 记录，因此仅后台批量描述任务持久化来源摘要；图片生成、视觉理解、可编辑 PPTX 和导出队列仍未接 runtime；个人 LazyLLM 显式凭据适配器未完成。
+- 下一步：运行完整后端 unit 回归；如通过，阶段性提交服务测试 + AIRuntimeConfig + 文本能力接入，再开始图片/视觉 runtime。
+
+### 2026-07-01 19:20 - 完整 unit 回归发现并修复可编辑 PPTX 进度变量回归
+
+- 范围：`backend/services/export_service.py`、`backend/tests/unit/test_editable_pptx_equations.py`、`docs/design/guangfu-zhicheng-design.md`。
+- 动作：运行全部后端 unit 测试；定位两个公式导出测试失败到 `create_editable_pptx_with_recursive_analysis`：使用预分析 `editable_images` 时，进度文案在 `total_pages` 赋值前读取变量。将 `total_pages = len(editable_images)` 提前到并行分析启动前，并移除构建阶段的重复赋值。
+- 结果：修复与本次 runtime 接入无关、但存在于当前分支的可编辑 PPTX 回归；传入预分析结果时不再因 `UnboundLocalError` 中断，后续并行分析和 PPTX 构建复用同一页数。
+- 初次完整回归：共 416 tests，`409 passed / 5 skipped / 2 failed`；失败均为上述 `total_pages` 初始化顺序问题，其余 runtime、设置、项目、视觉拆层和导出任务测试通过。
+- 计划状态：修复与完整回归闭环已完成；待阶段性提交本批改动。
+- 验证：`uv run --python 3.13 pytest backend/tests/unit/test_editable_pptx_equations.py -q` 通过，10 tests passed；`uv run --python 3.13 pytest backend/tests/unit -q` 通过，`411 passed / 5 skipped`；`git diff --check` 通过。
+- 遗留：当前工作区包含服务测试、runtime、文本能力和本次导出回归修复，尚未提交；图片/视觉 runtime、项目覆盖层、密钥加密和用户级 OAuth 仍未完成。
+- 下一步：阶段性提交本批改动；随后开始图片生成与视觉理解的请求级 runtime 和隔离 Provider 缓存。

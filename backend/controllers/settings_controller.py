@@ -80,6 +80,7 @@ def temporary_settings_override(settings_override: dict):
         None
     """
     original_values = {}
+    original_env_values = {}
 
     try:
         # 应用覆盖设置
@@ -175,6 +176,13 @@ def temporary_settings_override(settings_override: dict):
             original_values["OPENAI_IMAGE_API_PROTOCOL"] = current_app.config.get("OPENAI_IMAGE_API_PROTOCOL")
             current_app.config["OPENAI_IMAGE_API_PROTOCOL"] = settings_override["openai_image_api_protocol"]
 
+        for vendor, key in (settings_override.get("lazyllm_api_keys") or {}).items():
+            if vendor.lower() not in LAZYLLM_VENDORS or not key:
+                continue
+            env_key = f"{vendor.upper()}_API_KEY"
+            original_env_values[env_key] = os.environ.get(env_key)
+            os.environ[env_key] = key
+
         yield
 
     finally:
@@ -184,6 +192,11 @@ def temporary_settings_override(settings_override: dict):
                 current_app.config[key] = value
             else:
                 current_app.config.pop(key, None)
+        for key, value in original_env_values.items():
+            if value is not None:
+                os.environ[key] = value
+            else:
+                os.environ.pop(key, None)
 
 
 @settings_bp.route("/", methods=["GET"], strict_slashes=False)
@@ -1097,6 +1110,43 @@ TEST_FUNCTIONS = {
     "mineru-pdf": _test_mineru_pdf,
 }
 
+TEST_CAPABILITIES = {
+    "text-model": "outline",
+    "caption-model": "image_caption",
+    "image-model": "image_generation",
+}
+
+TEST_SOURCE_FIELDS = {
+    "text-model": {
+        "provider": {"ai_provider_format", "text_model_source"},
+        "model": {"text_model"},
+        "credential": {"api_key", "text_api_key"},
+        "api_base_url": {"api_base_url", "text_api_base_url"},
+    },
+    "caption-model": {
+        "provider": {"ai_provider_format", "image_caption_model_source"},
+        "model": {"image_caption_model"},
+        "credential": {"api_key", "image_caption_api_key"},
+        "api_base_url": {"api_base_url", "image_caption_api_base_url"},
+    },
+    "image-model": {
+        "provider": {"ai_provider_format", "image_model_source"},
+        "model": {"image_model"},
+        "credential": {"api_key", "image_api_key"},
+        "api_base_url": {"api_base_url", "image_api_base_url"},
+    },
+}
+
+
+def _mark_request_override_sources(test_name: str, test_settings: dict, override_settings: dict):
+    source_summary = test_settings.get("_effective_source")
+    if not source_summary:
+        return
+    override_keys = set(override_settings)
+    for source_key, field_names in TEST_SOURCE_FIELDS.get(test_name, {}).items():
+        if override_keys & field_names:
+            source_summary[source_key] = "request_override"
+
 
 def _is_codex_settings_test(test_name: str, test_settings: dict, error_text: str) -> bool:
     test_source_keys = {
@@ -1179,7 +1229,8 @@ def _run_test_async(task_id: str, test_name: str, test_settings: dict, app):
                     task.completed_at = datetime.now(timezone.utc)
                     task.set_progress({
                         'result': result_data,
-                        'message': message
+                        'message': message,
+                        'config_source': test_settings.get('_effective_source'),
                     })
                     db.session.commit()
                     logger.info(f"Test task {task_id} completed successfully")
@@ -1190,13 +1241,15 @@ def _run_test_async(task_id: str, test_name: str, test_settings: dict, app):
             task = Task.query.get(task_id)
             if task:
                 progress = {}
+                if test_settings.get('_effective_source'):
+                    progress['config_source'] = test_settings['_effective_source']
                 if _is_codex_oauth_unauthorized(e, test_name, test_settings):
                     _disconnect_expired_openai_oauth()
                     error_msg = "Codex 登录已过期或无效，已断开 OpenAI 账号连接。请重新登录 OpenAI 后再测试。"
-                    progress = {
+                    progress.update({
                         "openai_oauth_disconnected": True,
                         "message": error_msg,
-                    }
+                    })
                     logger.info("OpenAI OAuth disconnected after Codex settings test reported invalid credentials")
 
                 task.status = 'FAILED'
@@ -1231,32 +1284,15 @@ def run_settings_test(test_name: str):
         }
     """
     try:
-        # 从数据库加载已保存的全局设置作为基础
+        # 从数据库加载非模型服务配置；模型能力配置由 resolver 统一计算。
         global_settings = Settings.get_settings()
 
         # 构建基础测试设置（使用数据库中已保存的值）
         test_settings = {}
-        if global_settings.api_key:
-            test_settings["api_key"] = global_settings.api_key
-        if global_settings.api_base_url:
-            test_settings["api_base_url"] = global_settings.api_base_url
-        if global_settings.ai_provider_format:
-            test_settings["ai_provider_format"] = global_settings.ai_provider_format
-        if global_settings.text_model:
-            test_settings["text_model"] = global_settings.text_model
-        if global_settings.image_model:
-            test_settings["image_model"] = global_settings.image_model
-        if global_settings.image_caption_model:
-            test_settings["image_caption_model"] = global_settings.image_caption_model
-        if current_app.config.get("IMAGE_CAPTION_MODEL_SOURCE"):
-            test_settings["image_caption_model_source"] = current_app.config.get("IMAGE_CAPTION_MODEL_SOURCE")
-        # Per-model provider sources and credentials
-        for model_type in ('text', 'image', 'image_caption'):
-            for suffix in ('model_source', 'api_key', 'api_base_url'):
-                attr = f'{model_type}_{suffix}'
-                val = getattr(global_settings, attr, None)
-                if val:
-                    test_settings[attr] = val
+        capability = TEST_CAPABILITIES.get(test_name)
+        if capability:
+            from services.settings_resolver import resolve_capability_runtime_config
+            test_settings.update(resolve_capability_runtime_config(capability, g.current_user))
         if global_settings.mineru_api_base:
             test_settings["mineru_api_base"] = global_settings.mineru_api_base
         if global_settings.mineru_token:
@@ -1270,13 +1306,19 @@ def run_settings_test(test_name: str):
         test_settings["text_thinking_budget"] = global_settings.text_thinking_budget
         test_settings["enable_image_reasoning"] = global_settings.enable_image_reasoning
         test_settings["image_thinking_budget"] = global_settings.image_thinking_budget
-        test_settings["openai_image_api_protocol"] = global_settings.openai_image_api_protocol or current_app.config.get('OPENAI_IMAGE_API_PROTOCOL') or 'auto'
+        test_settings.setdefault(
+            "openai_image_api_protocol",
+            global_settings.openai_image_api_protocol
+            or current_app.config.get('OPENAI_IMAGE_API_PROTOCOL')
+            or 'auto',
+        )
 
         # 应用前端发送的覆盖参数（如果有的话，用于测试未保存的配置）
         override_settings = request.get_json() or {}
         if override_settings:
             logger.info(f"Applying test setting overrides: {list(override_settings.keys())}")
             test_settings.update(override_settings)
+            _mark_request_override_sources(test_name, test_settings, override_settings)
 
         # 创建任务记录（使用特殊的 project_id='settings-test'）
         task = Task(

@@ -8,6 +8,7 @@ from utils import success_response, error_response, not_found, bad_request
 from utils.auth import require_auth, get_current_user
 from services import FileService, ProjectContext
 from services.ai_service_manager import get_ai_service
+from services.ai_runtime import resolve_user_ai_runtime
 from services.task_manager import (
     task_manager,
     generate_single_page_image_task,
@@ -297,8 +298,7 @@ def generate_page_description(project_id, page_id):
                     page_data['part'] = p.part
                 outline.append(page_data)
         
-        # Initialize AI service
-        ai_service = get_ai_service()
+        runtime, ai_service = resolve_user_ai_runtime('description', get_current_user())
         
         # Get reference files content and create project context
         from controllers.project_controller import _get_project_reference_files_content

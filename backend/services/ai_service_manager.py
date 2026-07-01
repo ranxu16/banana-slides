@@ -23,7 +23,16 @@ from threading import Lock
 from typing import Optional
 from flask import current_app, has_app_context
 from .ai_service import AIService
-from .ai_providers import get_text_provider, get_image_provider, get_caption_provider, TextProvider, ImageProvider
+from .ai_providers import (
+    LAZYLLM_VENDORS,
+    create_text_provider,
+    get_text_provider,
+    get_image_provider,
+    get_caption_provider,
+    TextProvider,
+    ImageProvider,
+)
+from .ai_runtime import AIRuntimeConfig
 
 logger = logging.getLogger(__name__)
 
@@ -35,6 +44,7 @@ _lock = Lock()
 _text_provider_cache: dict = {}
 _image_provider_cache: dict = {}
 _caption_provider_cache: dict = {}
+_runtime_text_provider_cache: dict = {}
 _cache_lock = Lock()
 
 
@@ -83,6 +93,31 @@ def _get_cached_caption_provider(model: str) -> TextProvider:
             logger.info(f"Creating new CaptionProvider for model: {model}")
             _caption_provider_cache[model] = get_caption_provider(model=model)
         return _caption_provider_cache[model]
+
+
+def get_runtime_text_provider(runtime: AIRuntimeConfig) -> TextProvider:
+    """Return a provider isolated by model, endpoint, credential and account identity."""
+    if runtime.provider in ({"lazyllm"} | LAZYLLM_VENDORS):
+        raise ValueError("LazyLLM personal runtime isolation is not available yet; use the global configuration for this capability.")
+    with _cache_lock:
+        if runtime.cache_key not in _runtime_text_provider_cache:
+            _runtime_text_provider_cache[runtime.cache_key] = create_text_provider(
+                runtime.provider_config(),
+                model=runtime.model,
+            )
+        return _runtime_text_provider_cache[runtime.cache_key]
+
+
+def get_runtime_ai_service(runtime: AIRuntimeConfig) -> AIService:
+    """Create an AIService bound to one explicit runtime without reading global provider config."""
+    if runtime.capability not in {"outline", "description", "natural_edit", "pptx_generation", "export_queue"}:
+        raise ValueError(f"Text runtime does not support capability: {runtime.capability}")
+    service = AIService(
+        text_provider=get_runtime_text_provider(runtime),
+        initialize_missing_providers=False,
+    )
+    service.text_model = runtime.model
+    return service
 
 
 def get_ai_service(force_new: bool = False) -> AIService:
@@ -169,6 +204,7 @@ def clear_ai_service_cache():
             _text_provider_cache.clear()
             _image_provider_cache.clear()
             _caption_provider_cache.clear()
+            _runtime_text_provider_cache.clear()
             logger.info("Provider cache cleared")
 
 
@@ -184,5 +220,6 @@ def get_provider_cache_info() -> dict:
             "text_providers": list(_text_provider_cache.keys()),
             "image_providers": list(_image_provider_cache.keys()),
             "caption_providers": list(_caption_provider_cache.keys()),
-            "total_cached": len(_text_provider_cache) + len(_image_provider_cache) + len(_caption_provider_cache)
+            "runtime_text_providers": len(_runtime_text_provider_cache),
+            "total_cached": len(_text_provider_cache) + len(_image_provider_cache) + len(_caption_provider_cache) + len(_runtime_text_provider_cache)
         }
