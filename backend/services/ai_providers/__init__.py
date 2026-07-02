@@ -302,36 +302,22 @@ def _is_openai_vision_model_name(model: str) -> bool:
 
 def resolve_caption_model_for_provider(model: str, provider_format: str) -> str:
     """
-    Normalize image-caption model names for the selected provider.
+    Resolve image-caption model for the selected provider.
 
-    Users often configure all model sources to OpenAI/Codex but leave the
-    historical default caption model as gemini-*. In that case the API key is
-    fine, but the model name is invalid for ChatGPT/OpenAI providers. Prefer the
-    configured TEXT_MODEL when it is a GPT-family multimodal-capable name.
+    OpenAI/Codex caption path is intentionally pinned to gpt-5.5 so the
+    effective runtime model is deterministic and consistent with product policy.
     """
     fmt = (provider_format or '').lower()
-    if fmt not in {'openai', 'codex'}:
-        return model
-
-    if _is_openai_vision_model_name(model):
-        return model
-
-    text_model = _resolve_setting('TEXT_MODEL')
-    resolved = text_model if _is_openai_vision_model_name(text_model) else 'gpt-4o'
-    logger.info(
-        "Caption model %r is not compatible with %s provider; using %r instead",
-        model,
-        fmt,
-        resolved,
-    )
-    return resolved
+    if fmt in {'openai', 'codex'}:
+        return 'gpt-5.5'
+    return model
 
 
 def create_caption_provider(config: Dict[str, Any], model: str = "gpt-5.5") -> TextProvider:
     """Create an image-caption provider from an explicit runtime config."""
     fmt = config['format']
-    if fmt in {'openai', 'codex'} and not _is_openai_vision_model_name(model):
-        model = 'gpt-4o'
+    if fmt in {'openai', 'codex'}:
+        model = 'gpt-5.5'
 
     if fmt == 'anthropic':
         logger.info("Caption provider: Anthropic, model=%s", model)
